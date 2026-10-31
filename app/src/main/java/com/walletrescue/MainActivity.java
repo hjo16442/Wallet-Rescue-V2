@@ -2,26 +2,22 @@ package com.walletrescue;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.graphics.Color;
 import android.graphics.Typeface;
 import android.view.View;
 import android.widget.*;
-import android.graphics.Color;
-import org.json.JSONObject;
-import java.net.URL;
-import java.net.HttpURLConnection;
+import org.json.*;
+import java.net.*;
 import java.io.*;
-import java.math.BigInteger;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.math.*;
+import java.util.concurrent.*;
 
 public class MainActivity extends Activity {
 
     EditText addressInput;
     TextView result;
     Spinner networkSpinner;
-    Button checkButton;
+    Button checkButton, historyButton;
     ExecutorService executor = Executors.newSingleThreadExecutor();
 
     @Override
@@ -29,27 +25,21 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setOrientation(1);
         layout.setPadding(28, 35, 28, 25);
         layout.setBackgroundColor(Color.rgb(15, 23, 42));
 
         TextView title = new TextView(this);
-        title.setText("WALLET RESCUE V2");
+        title.setText("WALLET RESCUE V2.1");
         title.setTextSize(25);
         title.setTypeface(null, Typeface.BOLD);
         title.setTextColor(Color.WHITE);
         layout.addView(title);
 
-        TextView subtitle = new TextView(this);
-        subtitle.setText("Safe Wallet Address Checker");
-        subtitle.setTextColor(Color.LTGRAY);
-        subtitle.setTextSize(15);
-        layout.addView(subtitle);
-
         TextView label = new TextView(this);
         label.setText("Select Network");
         label.setTextColor(Color.WHITE);
-        label.setPadding(0, 30, 0, 8);
+        label.setPadding(0, 25, 0, 8);
         layout.addView(label);
 
         networkSpinner = new Spinner(this);
@@ -64,17 +54,20 @@ public class MainActivity extends Activity {
         addressInput.setTextColor(Color.WHITE);
         addressInput.setHintTextColor(Color.LTGRAY);
         addressInput.setSingleLine(true);
-        addressInput.setPadding(12, 15, 12, 15);
         layout.addView(addressInput);
 
         checkButton = new Button(this);
         checkButton.setText("CHECK WALLET");
         layout.addView(checkButton);
 
+        historyButton = new Button(this);
+        historyButton.setText("BITCOIN TRANSACTION HISTORY");
+        layout.addView(historyButton);
+
         result = new TextView(this);
         result.setTextColor(Color.WHITE);
-        result.setTextSize(17);
-        result.setPadding(0, 25, 0, 0);
+        result.setTextSize(15);
+        result.setPadding(0, 20, 0, 0);
         layout.addView(result);
 
         TextView safety = new TextView(this);
@@ -84,12 +77,12 @@ public class MainActivity extends Activity {
             "Never enter your seed phrase or private key."
         );
         safety.setTextColor(Color.rgb(100, 220, 160));
-        safety.setTextSize(14);
         layout.addView(safety);
 
         setContentView(layout);
 
         checkButton.setOnClickListener(v -> checkWallet());
+        historyButton.setOnClickListener(v -> loadHistory());
     }
 
     void checkWallet() {
@@ -97,7 +90,7 @@ public class MainActivity extends Activity {
         int network = networkSpinner.getSelectedItemPosition();
 
         if (address.isEmpty()) {
-            result.setText("Please enter a wallet address.");
+            result.setText("Enter a public address.");
             return;
         }
 
@@ -105,56 +98,95 @@ public class MainActivity extends Activity {
             !(address.startsWith("1") ||
               address.startsWith("3") ||
               address.toLowerCase().startsWith("bc1"))) {
-            result.setText("Invalid Bitcoin address format.");
+            result.setText("Invalid Bitcoin address.");
             return;
         }
 
         if (network == 1 &&
-            !(address.matches("(?i)^0x[0-9a-f]{40}$"))) {
-            result.setText("Invalid Ethereum address format.");
+            !address.matches("(?i)^0x[0-9a-f]{40}$")) {
+            result.setText("Invalid Ethereum address.");
             return;
         }
 
-        checkButton.setEnabled(false);
-        result.setText("Checking wallet...");
+        runTask(() -> {
+            if (network == 0) {
+                JSONObject data = getJson(
+                    "https://mempool.space/api/address/" + address);
 
-        executor.execute(() -> {
-            String response;
+                JSONObject stats = data.getJSONObject("chain_stats");
 
-            try {
-                if (network == 0) {
-                    response = checkBitcoin(address);
-                } else {
-                    response = checkEthereum(address);
-                }
-            } catch (Exception e) {
-                response = "Connection error. Please try again.";
+                long received = stats.getLong("funded_txo_sum");
+                long spent = stats.getLong("spent_txo_sum");
+
+                BigDecimal balance = BigDecimal.valueOf(received - spent)
+                    .divide(BigDecimal.valueOf(100000000));
+
+                return "BITCOIN WALLET\n\nAddress:\n" +
+                    address + "\n\nConfirmed balance:\n" +
+                    balance.toPlainString() + " BTC";
+            } else {
+                return checkEthereum(address);
             }
-
-            final String finalResponse = response;
-
-            runOnUiThread(() -> {
-                result.setText(finalResponse);
-                checkButton.setEnabled(true);
-            });
         });
     }
 
-    String checkBitcoin(String address) throws Exception {
-        String url = "https://mempool.space/api/address/" + address;
-        JSONObject data = request(url);
+    void loadHistory() {
+        String address = addressInput.getText().toString().trim();
 
-        JSONObject stats = data.getJSONObject("chain_stats");
+        if (address.isEmpty()) {
+            result.setText("Enter a Bitcoin public address.");
+            return;
+        }
 
-        long received = stats.getLong("funded_txo_sum");
-        long spent = stats.getLong("spent_txo_sum");
+        if (!(address.startsWith("1") ||
+              address.startsWith("3") ||
+              address.toLowerCase().startsWith("bc1"))) {
+            result.setText("Enter a valid Bitcoin address.");
+            return;
+        }
 
-        BigDecimal balance = BigDecimal.valueOf(received - spent)
-            .divide(BigDecimal.valueOf(100000000));
+        runTask(() -> {
+            String url = "https://mempool.space/api/address/" +
+                address + "/txs";
 
-        return "BITCOIN WALLET\n\n" +
-            "Address:\n" + address + "\n\n" +
-            "Confirmed balance:\n" + balance.toPlainString() + " BTC";
+            JSONArray transactions = getArray(url);
+
+            StringBuilder output = new StringBuilder();
+            output.append("BITCOIN TRANSACTION HISTORY\n\n");
+
+            if (transactions.length() == 0) {
+                output.append("No transactions found.");
+                return output.toString();
+            }
+
+            int count = Math.min(10, transactions.length());
+
+            for (int i = 0; i < count; i++) {
+                JSONObject tx = transactions.getJSONObject(i);
+                String txid = tx.getString("txid");
+
+                JSONObject status = tx.getJSONObject("status");
+
+                output.append("Transaction ")
+                    .append(i + 1).append("\n");
+
+                output.append("ID:\n")
+                    .append(txid).append("\n");
+
+                if (status.optBoolean("confirmed")) {
+                    long time = status.optLong("block_time", 0);
+                    output.append("Date: ")
+                        .append(new java.util.Date(time * 1000L))
+                        .append("\n");
+                } else {
+                    output.append("Status: Unconfirmed\n");
+                }
+
+                output.append("--------------------\n");
+            }
+
+            return output.toString();
+        });
     }
 
     String checkEthereum(String address) throws Exception {
@@ -177,39 +209,59 @@ public class MainActivity extends Activity {
         out.write(body.getBytes("UTF-8"));
         out.close();
 
-        BufferedReader reader = new BufferedReader(
-            new InputStreamReader(connection.getInputStream()));
-
-        StringBuilder text = new StringBuilder();
-        String line;
-
-        while ((line = reader.readLine()) != null) {
-            text.append(line);
-        }
-
-        reader.close();
+        String response = readResponse(connection);
+        JSONObject json = new JSONObject(response);
         connection.disconnect();
-
-        JSONObject json = new JSONObject(text.toString());
 
         if (json.has("error")) {
             throw new Exception("Ethereum RPC error");
         }
 
         String hex = json.getString("result");
-
         BigInteger wei = new BigInteger(hex.substring(2), 16);
 
-        BigDecimal eth = new BigDecimal(wei)
-            .divide(new BigDecimal("1000000000000000000"),
-                18, RoundingMode.DOWN);
+        BigDecimal eth = new BigDecimal(wei).divide(
+            new BigDecimal("1000000000000000000"),
+            18, RoundingMode.DOWN);
 
-        return "ETHEREUM WALLET\n\n" +
-            "Address:\n" + address + "\n\n" +
-            "Balance:\n" + eth.toPlainString() + " ETH";
+        return "ETHEREUM WALLET\n\nAddress:\n" +
+            address + "\n\nBalance:\n" +
+            eth.toPlainString() + " ETH";
     }
 
-    JSONObject request(String urlText) throws Exception {
+    void runTask(Callable<String> task) {
+        checkButton.setEnabled(false);
+        historyButton.setEnabled(false);
+        result.setText("Please wait...");
+
+        executor.execute(() -> {
+            String response;
+
+            try {
+                response = task.call();
+            } catch (Exception e) {
+                response = "Connection error.\nPlease try again.";
+            }
+
+            final String message = response;
+
+            runOnUiThread(() -> {
+                result.setText(message);
+                checkButton.setEnabled(true);
+                historyButton.setEnabled(true);
+            });
+        });
+    }
+
+    JSONObject getJson(String url) throws Exception {
+        return new JSONObject(getText(url));
+    }
+
+    JSONArray getArray(String url) throws Exception {
+        return new JSONArray(getText(url));
+    }
+
+    String getText(String urlText) throws Exception {
         URL url = new URL(urlText);
         HttpURLConnection connection =
             (HttpURLConnection) url.openConnection();
@@ -217,8 +269,21 @@ public class MainActivity extends Activity {
         connection.setConnectTimeout(15000);
         connection.setReadTimeout(15000);
 
+        String response = readResponse(connection);
+        connection.disconnect();
+        return response;
+    }
+
+    String readResponse(HttpURLConnection connection)
+        throws Exception {
+
+        InputStream stream =
+            connection.getResponseCode() < 400
+            ? connection.getInputStream()
+            : connection.getErrorStream();
+
         BufferedReader reader = new BufferedReader(
-            new InputStreamReader(connection.getInputStream()));
+            new InputStreamReader(stream, "UTF-8"));
 
         StringBuilder text = new StringBuilder();
         String line;
@@ -228,9 +293,7 @@ public class MainActivity extends Activity {
         }
 
         reader.close();
-        connection.disconnect();
-
-        return new JSONObject(text.toString());
+        return text.toString();
     }
 
     @Override
