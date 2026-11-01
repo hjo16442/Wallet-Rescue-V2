@@ -3,43 +3,41 @@ package com.walletrescue;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.content.Intent;
+import android.net.Uri;
+import android.database.Cursor;
+import android.provider.OpenableColumns;
 import android.graphics.Color;
 import android.graphics.Typeface;
-import android.text.InputType;
-import android.view.View;
 import android.widget.*;
 import org.json.*;
 import java.net.*;
 import java.io.*;
 import java.math.*;
-import java.util.List;
 import java.util.concurrent.*;
 
 public class MainActivity extends Activity {
 
-    EditText addressInput, recoveryInput;
+    EditText addressInput;
     TextView result;
     Spinner networkSpinner;
-    Button checkButton, historyButton, recoveryButton;
+    Button checkButton, historyButton, scanButton;
 
-    ExecutorService executor =
-        Executors.newSingleThreadExecutor();
+    ExecutorService executor = Executors.newSingleThreadExecutor();
+
+    static final int PICK_WALLET_FILE = 1001;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        ScrollView scroll = new ScrollView(this);
 
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(1);
         layout.setPadding(28, 35, 28, 25);
         layout.setBackgroundColor(Color.rgb(15, 23, 42));
 
-        scroll.addView(layout);
-
         TextView title = new TextView(this);
-        title.setText("WALLET RESCUE V2.2");
+        title.setText("WALLET RESCUE V2.3");
         title.setTextSize(25);
         title.setTypeface(null, Typeface.BOLD);
         title.setTextColor(Color.WHITE);
@@ -54,8 +52,7 @@ public class MainActivity extends Activity {
         networkSpinner = new Spinner(this);
         String[] networks = {"Bitcoin (BTC)", "Ethereum (ETH)"};
         ArrayAdapter<String> adapter = new ArrayAdapter<>(
-            this, android.R.layout.simple_spinner_dropdown_item,
-            networks);
+            this, android.R.layout.simple_spinner_dropdown_item, networks);
         networkSpinner.setAdapter(adapter);
         layout.addView(networkSpinner);
 
@@ -74,41 +71,9 @@ public class MainActivity extends Activity {
         historyButton.setText("BITCOIN TRANSACTION HISTORY");
         layout.addView(historyButton);
 
-        TextView recoveryTitle = new TextView(this);
-        recoveryTitle.setText("\nBIP39 MISSING WORD RECOVERY");
-        recoveryTitle.setTextSize(19);
-        recoveryTitle.setTypeface(null, Typeface.BOLD);
-        recoveryTitle.setTextColor(Color.rgb(100, 220, 160));
-        layout.addView(recoveryTitle);
-
-        TextView recoveryInfo = new TextView(this);
-        recoveryInfo.setText(
-            "English BIP39 only.\n" +
-            "Enter 12 or 24 words and replace the missing word with ?.\n" +
-            "Example format: word1 word2 ? word4 ..."
-        );
-        recoveryInfo.setTextColor(Color.LTGRAY);
-        recoveryInfo.setPadding(0, 10, 0, 10);
-        layout.addView(recoveryInfo);
-
-        recoveryInput = new EditText(this);
-        recoveryInput.setHint("Enter phrase with one ? for missing word");
-        recoveryInput.setTextColor(Color.WHITE);
-        recoveryInput.setHintTextColor(Color.LTGRAY);
-        recoveryInput.setGravity( android.view.Gravity.TOP );
-        recoveryInput.setMinLines(3);
-        recoveryInput.setSingleLine(false);
-        recoveryInput.setInputType(
-            InputType.TYPE_CLASS_TEXT |
-            InputType.TYPE_TEXT_FLAG_MULTI_LINE |
-            InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-        );
-        recoveryInput.setSaveEnabled(false);
-        layout.addView(recoveryInput);
-
-        recoveryButton = new Button(this);
-        recoveryButton.setText("FIND MISSING WORD");
-        layout.addView(recoveryButton);
+        scanButton = new Button(this);
+        scanButton.setText("SCAN WALLET FILES");
+        layout.addView(scanButton);
 
         result = new TextView(this);
         result.setTextColor(Color.WHITE);
@@ -120,17 +85,83 @@ public class MainActivity extends Activity {
         safety.setText(
             "\nSECURITY NOTICE\n" +
             "Only public addresses are used for online checks.\n" +
-            "Never share your seed phrase or private key.\n" +
-            "Recovery runs locally on this device."
+            "Selected files are inspected locally.\n" +
+            "Never share your seed phrase or private key."
         );
         safety.setTextColor(Color.rgb(100, 220, 160));
         layout.addView(safety);
 
-        setContentView(scroll);
+        setContentView(layout);
 
         checkButton.setOnClickListener(v -> checkWallet());
         historyButton.setOnClickListener(v -> loadHistory());
-        recoveryButton.setOnClickListener(v -> recoverMissingWord());
+        scanButton.setOnClickListener(v -> selectWalletFile());
+    }
+
+    void selectWalletFile() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.setType("*/*");
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        startActivityForResult(intent, PICK_WALLET_FILE);
+    }
+
+    @Override
+    protected void onActivityResult(
+        int requestCode, int resultCode, Intent data) {
+
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == PICK_WALLET_FILE &&
+            resultCode == RESULT_OK && data != null) {
+
+            Uri uri = data.getData();
+
+            if (uri == null) return;
+
+            String fileName = getFileName(uri);
+            String lower = fileName.toLowerCase();
+
+            String type = "Unknown wallet file";
+
+            if (lower.equals("wallet.dat")) {
+                type = "Bitcoin Core wallet.dat";
+            } else if (lower.startsWith("utc--")) {
+                type = "Ethereum Keystore";
+            } else if (lower.endsWith(".json")) {
+                type = "JSON wallet backup";
+            } else if (lower.endsWith(".txt")) {
+                type = "Text backup file";
+            }
+
+            result.setText(
+                "FILE SCAN RESULT\n\n" +
+                "Name: " + fileName + "\n\n" +
+                "Detected type:\n" + type +
+                "\n\nThis is only file identification. " +
+                "Wallet validity and recoverability have not been verified."
+            );
+        }
+    }
+
+    String getFileName(Uri uri) {
+        String name = "Selected file";
+
+        try (Cursor cursor = getContentResolver()
+            .query(uri, null, null, null, null)) {
+
+            if (cursor != null &&
+                cursor.moveToFirst()) {
+
+                int index = cursor.getColumnIndex(
+                    OpenableColumns.DISPLAY_NAME);
+
+                if (index >= 0) {
+                    name = cursor.getString(index);
+                }
+            }
+        } catch (Exception ignored) {}
+
+        return name;
     }
 
     void checkWallet() {
@@ -194,10 +225,9 @@ public class MainActivity extends Activity {
         }
 
         runTask(() -> {
-            String url = "https://mempool.space/api/address/" +
-                address + "/txs";
-
-            JSONArray transactions = getArray(url);
+            JSONArray transactions = getArray(
+                "https://mempool.space/api/address/" +
+                address + "/txs");
 
             StringBuilder output = new StringBuilder();
             output.append("BITCOIN TRANSACTION HISTORY\n\n");
@@ -211,15 +241,11 @@ public class MainActivity extends Activity {
 
             for (int i = 0; i < count; i++) {
                 JSONObject tx = transactions.getJSONObject(i);
-                String txid = tx.getString("txid");
-
                 JSONObject status = tx.getJSONObject("status");
 
                 output.append("Transaction ")
-                    .append(i + 1).append("\n");
-
-                output.append("ID:\n")
-                    .append(txid).append("\n");
+                    .append(i + 1).append("\nID:\n")
+                    .append(tx.getString("txid")).append("\n");
 
                 if (status.optBoolean("confirmed")) {
                     long time = status.optLong("block_time", 0);
@@ -234,69 +260,6 @@ public class MainActivity extends Activity {
             }
 
             return output.toString();
-        });
-    }
-
-    void recoverMissingWord() {
-        String phrase =
-            recoveryInput.getText().toString().trim();
-
-        if (phrase.isEmpty()) {
-            result.setText("Enter the phrase with ? for the missing word.");
-            return;
-        }
-
-        checkButton.setEnabled(false);
-        historyButton.setEnabled(false);
-        recoveryButton.setEnabled(false);
-        result.setText("Checking BIP39 checksum locally...");
-
-        executor.execute(() -> {
-            String message;
-
-            try {
-                List<String> candidates =
-                    MnemonicRecovery.findCandidates(this, phrase);
-
-                StringBuilder output = new StringBuilder();
-                output.append("BIP39 CANDIDATES\n\n");
-
-                if (candidates.isEmpty()) {
-                    output.append("No candidates passed the checksum.");
-                } else {
-                    output.append("Possible missing words:\n\n");
-
-                    for (int i = 0; i < candidates.size(); i++) {
-                        output.append(i + 1)
-                            .append(". ")
-                            .append(candidates.get(i))
-                            .append("\n");
-                    }
-
-                    output.append("\nTotal candidates: ")
-                        .append(candidates.size());
-                }
-
-                output.append(
-                    "\n\nChecksum validity does not prove wallet ownership " +
-                    "or recover funds."
-                );
-
-                message = output.toString();
-
-            } catch (Exception e) {
-                message = "Recovery error:\n" + e.getMessage();
-            }
-
-            final String finalMessage = message;
-
-            runOnUiThread(() -> {
-                result.setText(finalMessage);
-                recoveryInput.setText("");
-                checkButton.setEnabled(true);
-                historyButton.setEnabled(true);
-                recoveryButton.setEnabled(true);
-            });
         });
     }
 
@@ -343,7 +306,7 @@ public class MainActivity extends Activity {
     void runTask(Callable<String> task) {
         checkButton.setEnabled(false);
         historyButton.setEnabled(false);
-        recoveryButton.setEnabled(false);
+        scanButton.setEnabled(false);
         result.setText("Please wait...");
 
         executor.execute(() -> {
@@ -361,7 +324,7 @@ public class MainActivity extends Activity {
                 result.setText(message);
                 checkButton.setEnabled(true);
                 historyButton.setEnabled(true);
-                recoveryButton.setEnabled(true);
+                scanButton.setEnabled(true);
             });
         });
     }
