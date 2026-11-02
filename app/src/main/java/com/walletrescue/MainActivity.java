@@ -1,3 +1,4 @@
+
 package com.walletrescue;
 
 import android.app.Activity;
@@ -9,7 +10,9 @@ import android.provider.OpenableColumns;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.widget.*;
+
 import org.json.*;
+
 import java.net.*;
 import java.io.*;
 import java.math.*;
@@ -38,7 +41,7 @@ public class MainActivity extends Activity {
         layout.setBackgroundColor(Color.rgb(15, 23, 42));
 
         TextView title = new TextView(this);
-        title.setText("WALLET RESCUE V3");
+        title.setText("WALLET RESCUE V3.1");
         title.setTextSize(25);
         title.setTypeface(null, Typeface.BOLD);
         title.setTextColor(Color.WHITE);
@@ -108,6 +111,20 @@ public class MainActivity extends Activity {
         checkButton.setOnClickListener(v -> checkWallet());
         historyButton.setOnClickListener(v -> loadHistory());
         scanButton.setOnClickListener(v -> selectWalletFile());
+    }
+
+    boolean validAddress(String address, int network) {
+        if (network == 0) {
+            return address.startsWith("1") ||
+                address.startsWith("3") ||
+                address.toLowerCase().startsWith("bc1");
+        }
+
+        if (network == 1) {
+            return address.matches("(?i)^0x[0-9a-f]{40}$");
+        }
+
+        return address.matches("^T[1-9A-HJ-NP-Za-km-z]{33}$");
     }
 
     void selectWalletFile() {
@@ -182,35 +199,45 @@ public class MainActivity extends Activity {
             return;
         }
 
-        if (network == 0 &&
-            !(address.startsWith("1") ||
-              address.startsWith("3") ||
-              address.toLowerCase().startsWith("bc1"))) {
-            result.setText("Invalid Bitcoin address format.");
-            return;
-        }
-
-        if (network == 1 &&
-            !address.matches("(?i)^0x[0-9a-f]{40}$")) {
-            result.setText("Invalid Ethereum address.");
-            return;
-        }
-
-        if (network == 2 &&
-            !address.matches("^T[1-9A-HJ-NP-Za-km-z]{33}$")) {
-            result.setText("Invalid TRON address format.");
+        if (!validAddress(address, network)) {
+            result.setText("Invalid wallet address format.");
             return;
         }
 
         runTask(() -> {
-    if (network == 0) {
-        return checkBitcoin(address);
-    } else if (network == 1) {
-        return checkEthereum(address);
-    } else {
-        return checkTron(address);
+            if (network == 0) {
+                return checkBitcoin(address);
+            } else if (network == 1) {
+                return checkEthereum(address);
+            } else {
+                return checkTron(address);
+            }
+        });
     }
-});
+
+    void loadHistory() {
+        String address = addressInput.getText().toString().trim();
+        int network = networkSpinner.getSelectedItemPosition();
+
+        if (address.isEmpty()) {
+            result.setText("Enter a public address.");
+            return;
+        }
+
+        if (!validAddress(address, network)) {
+            result.setText("Invalid wallet address format.");
+            return;
+        }
+
+        runTask(() -> {
+            if (network == 0) {
+                return bitcoinHistory(address);
+            } else if (network == 1) {
+                return ethereumHistory(address);
+            } else {
+                return tronHistory(address);
+            }
+        });
     }
 
     String checkBitcoin(String address) throws Exception {
@@ -236,40 +263,42 @@ public class MainActivity extends Activity {
         HttpURLConnection connection =
             (HttpURLConnection) url.openConnection();
 
-        connection.setRequestMethod("POST");
-        connection.setConnectTimeout(15000);
-        connection.setReadTimeout(15000);
-        connection.setDoOutput(true);
-        connection.setRequestProperty(
-            "Content-Type", "application/json");
+        try {
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(15000);
+            connection.setDoOutput(true);
+            connection.setRequestProperty(
+                "Content-Type", "application/json");
 
-        String body =
-            "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getBalance\"," +
-            "\"params\":[\"" + address + "\",\"latest\"],\"id\":1}";
+            String body =
+                "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getBalance\"," +
+                "\"params\":[\"" + address + "\",\"latest\"],\"id\":1}";
 
-        try (OutputStream out = connection.getOutputStream()) {
-            out.write(body.getBytes("UTF-8"));
+            try (OutputStream out = connection.getOutputStream()) {
+                out.write(body.getBytes("UTF-8"));
+            }
+
+            JSONObject json = new JSONObject(readResponse(connection));
+
+            if (json.has("error")) {
+                throw new Exception("Ethereum RPC error");
+            }
+
+            String hex = json.getString("result");
+            BigInteger wei = new BigInteger(hex.substring(2), 16);
+
+            BigDecimal eth = new BigDecimal(wei).divide(
+                new BigDecimal("1000000000000000000"),
+                18, RoundingMode.DOWN);
+
+            return "ETHEREUM WALLET\n\nAddress:\n" +
+                address + "\n\nBalance:\n" +
+                eth.toPlainString() + " ETH";
+
+        } finally {
+            connection.disconnect();
         }
-
-        String response = readResponse(connection);
-        connection.disconnect();
-
-        JSONObject json = new JSONObject(response);
-
-        if (json.has("error")) {
-            throw new Exception("Ethereum RPC error");
-        }
-
-        String hex = json.getString("result");
-        BigInteger wei = new BigInteger(hex.substring(2), 16);
-
-        BigDecimal eth = new BigDecimal(wei).divide(
-            new BigDecimal("1000000000000000000"),
-            18, RoundingMode.DOWN);
-
-        return "ETHEREUM WALLET\n\nAddress:\n" +
-            address + "\n\nBalance:\n" +
-            eth.toPlainString() + " ETH";
     }
 
     String checkTron(String address) throws Exception {
@@ -284,7 +313,6 @@ public class MainActivity extends Activity {
         }
 
         JSONObject account = accounts.getJSONObject(0);
-
         long sun = account.optLong("balance", 0);
 
         BigDecimal trx = BigDecimal.valueOf(sun)
@@ -293,84 +321,6 @@ public class MainActivity extends Activity {
         return "TRON WALLET\n\nAddress:\n" +
             address + "\n\nBalance:\n" +
             trx.toPlainString() + " TRX";
-    }
-    void loadHistory() {
-    String address = addressInput.getText().toString().trim();
-    int network = networkSpinner.getSelectedItemPosition();
-
-    if (address.isEmpty()) {
-        result.setText("Enter a public address.");
-        return;
-    }
-
-    if (network == 0 &&
-        !(address.startsWith("1") ||
-          address.startsWith("3") ||
-          address.toLowerCase().startsWith("bc1"))) {
-        result.setText("Invalid Bitcoin address.");
-        return;
-    }
-
-    if (network == 1 &&
-        !address.matches("(?i)^0x[0-9a-f]{40}$")) {
-        result.setText("Invalid Ethereum address.");
-        return;
-    }
-
-    if (network == 2 &&
-        !address.matches("^T[1-9A-HJ-NP-Za-km-z]{33}$")) {
-        result.setText("Invalid TRON address.");
-        return;
-    }
-
-    runTask(() -> {
-        if (network == 0) {
-            return bitcoinHistory(address);
-        } else if (network == 1) {
-            return ethereumHistory(address);
-        } else {
-            return tronHistory(address);
-        }
-    });
-    }
-        String address = addressInput.getText().toString().trim();
-        int network = networkSpinner.getSelectedItemPosition();
-
-        if (address.isEmpty()) {
-            result.setText("Enter a public address.");
-            return;
-        }
-
-        if (network == 0 &&
-            !(address.startsWith("1") ||
-              address.startsWith("3") ||
-              address.toLowerCase().startsWith("bc1"))) {
-            result.setText("Invalid Bitcoin address.");
-            return;
-        }
-
-        if (network == 1 &&
-            !address.matches("(?i)^0x[0-9a-f]{40}$")) {
-            result.setText("Invalid Ethereum address.");
-            return;
-        }
-
-        if (network == 2 &&
-            !address.matches("^T[1-9A-HJ-NP-Za-km-z]{33}$")) {
-            result.setText("Invalid TRON address.");
-            return;
-        }
-
-        runTask(() -> {
-            if (network == 0) {
-                return bitcoinHistory(address);
-                } else if (network == 1) {
-    return ethereumHistory(address);
-} else {
-    return tronHistory(address);
-            }
-            }
-        });
     }
 
     String bitcoinHistory(String address) throws Exception {
@@ -393,7 +343,8 @@ public class MainActivity extends Activity {
 
             output.append("Transaction ")
                 .append(i + 1).append("\nID:\n")
-                .append(tx.getString("txid")).append("\n");
+                .append(tx.optString("txid", "Unknown"))
+                .append("\n");
 
             if (status.optBoolean("confirmed")) {
                 long time = status.optLong("block_time", 0);
@@ -410,12 +361,80 @@ public class MainActivity extends Activity {
         return output.toString();
     }
 
+    String ethereumHistory(String address) throws Exception {
+        String url =
+            "https://eth.blockscout.com/api/v2/addresses/" +
+            address + "/transactions";
+
+        JSONObject json = getJson(url);
+        JSONArray transactions = json.optJSONArray("items");
+
+        if (transactions == null || transactions.length() == 0) {
+            return "No Ethereum transactions found.";
+        }
+
+        StringBuilder output = new StringBuilder();
+        output.append("ETHEREUM TRANSACTION HISTORY\n\n");
+
+        int count = Math.min(10, transactions.length());
+
+        for (int i = 0; i < count; i++) {
+            JSONObject tx = transactions.getJSONObject(i);
+
+            JSONObject from = tx.optJSONObject("from");
+            JSONObject to = tx.optJSONObject("to");
+
+            String fromAddress = from == null
+                ? "Unknown" : from.optString("hash", "Unknown");
+
+            String toAddress = to == null
+                ? "Contract creation" : to.optString("hash", "Unknown");
+
+            String value = tx.optString("value", "0");
+
+            BigDecimal eth = new BigDecimal(value).divide(
+                new BigDecimal("1000000000000000000"),
+                18, RoundingMode.DOWN);
+
+            output.append("Transaction ")
+                .append(i + 1).append("\n");
+
+            output.append("ID:\n")
+                .append(tx.optString("hash", "Unknown"))
+                .append("\n");
+
+            output.append("Date: ")
+                .append(tx.optString("timestamp", "Unknown"))
+                .append("\n");
+
+            output.append("From: ")
+                .append(fromAddress).append("\n");
+
+            output.append("To: ")
+                .append(toAddress).append("\n");
+
+            output.append("Value: ")
+                .append(eth.toPlainString())
+                .append(" ETH\n");
+
+            output.append("Status: ")
+                .append(tx.optString("status", "Unknown"))
+                .append("\n");
+
+            output.append("--------------------\n");
+        }
+
+        return output.toString();
+    }
+
     String tronHistory(String address) throws Exception {
-        JSONArray transactions = getJson(
+        JSONObject json = getJson(
             "https://api.trongrid.io/v1/accounts/" +
             address +
             "/transactions?limit=10&only_confirmed=true"
-        ).optJSONArray("data");
+        );
+
+        JSONArray transactions = json.optJSONArray("data");
 
         StringBuilder output = new StringBuilder();
         output.append("TRON TRANSACTION HISTORY\n\n");
@@ -440,14 +459,17 @@ public class MainActivity extends Activity {
                     .append("\n");
             }
 
-            JSONArray contracts = tx.optJSONObject("raw_data")
-                .optJSONArray("contract");
+            JSONObject rawData = tx.optJSONObject("raw_data");
 
-            if (contracts != null && contracts.length() > 0) {
-                output.append("Type: ")
-                    .append(contracts.getJSONObject(0)
-                    .optString("type", "Unknown"))
-                    .append("\n");
+            if (rawData != null) {
+                JSONArray contracts = rawData.optJSONArray("contract");
+
+                if (contracts != null && contracts.length() > 0) {
+                    output.append("Type: ")
+                        .append(contracts.getJSONObject(0)
+                        .optString("type", "Unknown"))
+                        .append("\n");
+                }
             }
 
             output.append("--------------------\n");
@@ -499,13 +521,13 @@ public class MainActivity extends Activity {
         HttpURLConnection connection =
             (HttpURLConnection) url.openConnection();
 
-        connection.setConnectTimeout(15000);
-        connection.setReadTimeout(15000);
-
-        String response = readResponse(connection);
-        connection.disconnect();
-
-        return response;
+        try {
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(15000);
+            return readResponse(connection);
+        } finally {
+            connection.disconnect();
+        }
     }
 
     String readResponse(HttpURLConnection connection)
@@ -526,11 +548,14 @@ public class MainActivity extends Activity {
         StringBuilder text = new StringBuilder();
         String line;
 
-        while ((line = reader.readLine()) != null) {
-            text.append(line);
+        try {
+            while ((line = reader.readLine()) != null) {
+                text.append(line);
+            }
+        } finally {
+            reader.close();
         }
 
-        reader.close();
         return text.toString();
     }
 
