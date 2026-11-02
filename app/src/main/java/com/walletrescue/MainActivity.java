@@ -327,10 +327,11 @@ public class MainActivity extends Activity {
         runTask(() -> {
             if (network == 0) {
                 return bitcoinHistory(address);
-            } else if (network == 2) {
-                return tronHistory(address);
-            } else {
-                return "Ethereum transaction history is not enabled yet.";
+                } else if (network == 1) {
+    return ethereumHistory(address);
+} else {
+    return tronHistory(address);
+            }
             }
         });
     }
