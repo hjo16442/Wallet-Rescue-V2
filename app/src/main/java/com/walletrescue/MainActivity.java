@@ -202,13 +202,13 @@ public class MainActivity extends Activity {
             return;
         }
 
-        runTask(() -> {
+                runTask(() -> {
             if (network == 0) {
-                return checkBitcoin(address);
+                return bitcoinHistory(address);
             } else if (network == 1) {
-                return checkEthereum(address);
+                return ethereumHistory(address);
             } else {
-                return checkTron(address);
+                return tronHistory(address);
             }
         });
     }
