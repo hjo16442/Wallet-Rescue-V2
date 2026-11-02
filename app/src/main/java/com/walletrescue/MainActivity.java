@@ -202,15 +202,15 @@ public class MainActivity extends Activity {
             return;
         }
 
-                runTask(() -> {
-            if (network == 0) {
-                return bitcoinHistory(address);
-            } else if (network == 1) {
-                return ethereumHistory(address);
-            } else {
-                return tronHistory(address);
-            }
-        });
+        runTask(() -> {
+    if (network == 0) {
+        return checkBitcoin(address);
+    } else if (network == 1) {
+        return checkEthereum(address);
+    } else {
+        return checkTron(address);
+    }
+});
     }
 
     String checkBitcoin(String address) throws Exception {
