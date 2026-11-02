@@ -294,8 +294,45 @@ public class MainActivity extends Activity {
             address + "\n\nBalance:\n" +
             trx.toPlainString() + " TRX";
     }
-
     void loadHistory() {
+    String address = addressInput.getText().toString().trim();
+    int network = networkSpinner.getSelectedItemPosition();
+
+    if (address.isEmpty()) {
+        result.setText("Enter a public address.");
+        return;
+    }
+
+    if (network == 0 &&
+        !(address.startsWith("1") ||
+          address.startsWith("3") ||
+          address.toLowerCase().startsWith("bc1"))) {
+        result.setText("Invalid Bitcoin address.");
+        return;
+    }
+
+    if (network == 1 &&
+        !address.matches("(?i)^0x[0-9a-f]{40}$")) {
+        result.setText("Invalid Ethereum address.");
+        return;
+    }
+
+    if (network == 2 &&
+        !address.matches("^T[1-9A-HJ-NP-Za-km-z]{33}$")) {
+        result.setText("Invalid TRON address.");
+        return;
+    }
+
+    runTask(() -> {
+        if (network == 0) {
+            return bitcoinHistory(address);
+        } else if (network == 1) {
+            return ethereumHistory(address);
+        } else {
+            return tronHistory(address);
+        }
+    });
+    }
         String address = addressInput.getText().toString().trim();
         int network = networkSpinner.getSelectedItemPosition();
 
