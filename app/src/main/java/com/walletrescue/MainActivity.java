@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
         layout.setBackgroundColor(Color.rgb(15, 23, 42));
 
         TextView title = new TextView(this);
-        title.setText("WALLET RESCUE V3.1");
+        title.setText("WALLET RESCUE V3.2");
         title.setTextSize(25);
         title.setTypeface(null, Typeface.BOLD);
         title.setTextColor(Color.WHITE);
@@ -182,7 +182,10 @@ public class MainActivity extends Activity {
                     OpenableColumns.DISPLAY_NAME);
 
                 if (index >= 0) {
-                    name = cursor.getString(index);
+                    String found = cursor.getString(index);
+                    if (found != null && !found.isEmpty()) {
+                        name = found;
+                    }
                 }
             }
         } catch (Exception ignored) {}
@@ -257,19 +260,26 @@ public class MainActivity extends Activity {
             balance.toPlainString() + " BTC";
     }
 
+    // Ethereum balance using PublicNode RPC
     String checkEthereum(String address) throws Exception {
-        URL url = new URL("https://cloudflare-eth.com");
+
+        URL url = new URL(
+            "https://ethereum-rpc.publicnode.com");
 
         HttpURLConnection connection =
             (HttpURLConnection) url.openConnection();
 
         try {
             connection.setRequestMethod("POST");
-            connection.setConnectTimeout(15000);
-            connection.setReadTimeout(15000);
+            connection.setConnectTimeout(20000);
+            connection.setReadTimeout(20000);
             connection.setDoOutput(true);
+
             connection.setRequestProperty(
                 "Content-Type", "application/json");
+
+            connection.setRequestProperty(
+                "Accept", "application/json");
 
             String body =
                 "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getBalance\"," +
@@ -277,15 +287,36 @@ public class MainActivity extends Activity {
 
             try (OutputStream out = connection.getOutputStream()) {
                 out.write(body.getBytes("UTF-8"));
+                out.flush();
             }
 
-            JSONObject json = new JSONObject(readResponse(connection));
+            int statusCode = connection.getResponseCode();
+
+            String response = readResponse(connection);
+
+            if (statusCode >= 400) {
+                throw new Exception(
+                    "Ethereum RPC HTTP error: " + statusCode);
+            }
+
+            JSONObject json = new JSONObject(response);
 
             if (json.has("error")) {
-                throw new Exception("Ethereum RPC error");
+                JSONObject error = json.optJSONObject("error");
+
+                String message = error == null
+                    ? "Unknown RPC error"
+                    : error.optString("message", "Unknown RPC error");
+
+                throw new Exception(message);
             }
 
-            String hex = json.getString("result");
+            String hex = json.optString("result", "");
+
+            if (!hex.startsWith("0x") || hex.length() < 3) {
+                throw new Exception("Invalid Ethereum RPC response");
+            }
+
             BigInteger wei = new BigInteger(hex.substring(2), 16);
 
             BigDecimal eth = new BigDecimal(wei).divide(
@@ -492,7 +523,7 @@ public class MainActivity extends Activity {
             } catch (Exception e) {
                 response =
                     "Connection error.\n" +
-                    "The network service may be unavailable.\n" +
+                    "Details: " + e.getMessage() + "\n\n" +
                     "Please try again.";
             }
 
@@ -524,6 +555,7 @@ public class MainActivity extends Activity {
         try {
             connection.setConnectTimeout(15000);
             connection.setReadTimeout(15000);
+
             return readResponse(connection);
         } finally {
             connection.disconnect();
@@ -533,13 +565,15 @@ public class MainActivity extends Activity {
     String readResponse(HttpURLConnection connection)
         throws Exception {
 
-        InputStream stream =
-            connection.getResponseCode() < 400
+        int code = connection.getResponseCode();
+
+        InputStream stream = code < 400
             ? connection.getInputStream()
             : connection.getErrorStream();
 
         if (stream == null) {
-            throw new Exception("Empty server response");
+            throw new Exception(
+                "Empty server response. HTTP " + code);
         }
 
         BufferedReader reader = new BufferedReader(
