@@ -25,7 +25,8 @@ public class MainActivity extends Activity {
     TextView result;
     Spinner networkSpinner;
     Button checkButton, historyButton, scanButton, recoveryButton, bulkScanButton, generateButton;
-    Button autoScanButton;
+    Button autoScanButton, cancelScanButton;
+    volatile boolean scanCancelled = false;
 
     ExecutorService executor = Executors.newSingleThreadExecutor();
     static final int PICK_WALLET_FILE = 1001;
