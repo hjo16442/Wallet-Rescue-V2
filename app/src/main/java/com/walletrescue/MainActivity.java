@@ -90,6 +90,10 @@ public class MainActivity extends Activity {
         recoveryButton.setText("RECOVER WALLET");
         layout.addView(recoveryButton);
         recoveryButton.setOnClickListener(v -> showRecoveryDialog());
+        generateButton = new Button(this);
+generateButton.setText("GENERATE NEW WALLET");
+layout.addView(generateButton);
+generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
 
         historyButton = new Button(this);
         historyButton.setText("TRANSACTION HISTORY");
