@@ -37,7 +37,7 @@ public final class AutoWalletScanner {
     private AutoWalletScanner() {}
 
     public static String scan(Context context, String phrase) throws Exception {
-        return scan(context, phrase, DEFAULT_ADDRESS_COUNT);
+        return scan(context, phrase, DEFAULT_addressCount);
     }
 
     public static String scan(Context context, String phrase, int addressCount) throws Exception {
@@ -67,9 +67,23 @@ public final class AutoWalletScanner {
             DeterministicKey btcMaster = HDKeyDerivation.createMasterPrivateKey(seed);
 
             report.append("BITCOIN — BIP44 (Legacy)\n");
-            for (int i = 0; i < ADDRESS_COUNT; i++) {
+            for (int i = 0; i < addressCount; i++) {
                 DeterministicKey key = deriveBitcoin(btcMaster, 44, i);
                 String address = LegacyAddress.fromKey(btcParams, key).toString();
+                String line = safeBitcoin(address);
+                report.append(line).append("\n");
+                checked++;
+                if (cancelled.getAsBoolean()) throw new InterruptedException("Cancelled by user");
+                progress.accept(checked, addressCount * 4);
+                if (cancelled.getAsBoolean()) throw new InterruptedException("Cancelled by user");
+                progress.accept(checked, addressCount * 4);
+                if (line.contains("موجودی:") && !line.contains("موجودی: 0 BTC")) found++;
+            }
+
+            report.append("\nBITCOIN — BIP84 (Native SegWit)\n");
+            for (int i = 0; i < addressCount; i++) {
+                DeterministicKey key = deriveBitcoin(btcMaster, 84, i);
+                String address = SegwitAddress.fromKey(btcParams, key).toString();
                 String line = safeBitcoin(address);
                 report.append(line).append("\n");
                 checked++;
@@ -78,19 +92,9 @@ public final class AutoWalletScanner {
                 if (line.contains("موجودی:") && !line.contains("موجودی: 0 BTC")) found++;
             }
 
-            report.append("\nBITCOIN — BIP84 (Native SegWit)\n");
-            for (int i = 0; i < ADDRESS_COUNT; i++) {
-                DeterministicKey key = deriveBitcoin(btcMaster, 84, i);
-                String address = SegwitAddress.fromKey(btcParams, key).toString();
-                String line = safeBitcoin(address);
-                report.append(line).append("\n");
-                checked++;
-                if (line.contains("موجودی:") && !line.contains("موجودی: 0 BTC")) found++;
-            }
-
             Bip32ECKeyPair master = Bip32ECKeyPair.generateKeyPair(seed);
             report.append("\nETHEREUM — m/44'/60'/0'/0/i\n");
-            for (int i = 0; i < ADDRESS_COUNT; i++) {
+            for (int i = 0; i < addressCount; i++) {
                 try {
                     int[] path = {harden(44), harden(60), harden(0), 0, i};
                     Bip32ECKeyPair key = Bip32ECKeyPair.deriveKeyPair(master, path);
@@ -103,10 +107,12 @@ public final class AutoWalletScanner {
                             .append(e.getMessage()).append(")\n");
                 }
                 checked++;
+                if (cancelled.getAsBoolean()) throw new InterruptedException("Cancelled by user");
+                progress.accept(checked, addressCount * 4);
             }
 
             report.append("\nTRON — m/44'/195'/0'/0/i\n");
-            for (int i = 0; i < ADDRESS_COUNT; i++) {
+            for (int i = 0; i < addressCount; i++) {
                 try {
                     int[] path = {harden(44), harden(195), harden(0), 0, i};
                     Bip32ECKeyPair key = Bip32ECKeyPair.deriveKeyPair(master, path);
@@ -119,6 +125,8 @@ public final class AutoWalletScanner {
                             .append(e.getMessage()).append(")\n");
                 }
                 checked++;
+                if (cancelled.getAsBoolean()) throw new InterruptedException("Cancelled by user");
+                progress.accept(checked, addressCount * 4);
             }
 
             report.append("\nپایان بررسی: ").append(checked).append(" آدرس مشتق‌شده");
