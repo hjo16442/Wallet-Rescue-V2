@@ -600,8 +600,7 @@ recoveryButton.setEnabled(true);
 
         return text.toString();
     }
-
-    @Override 
+ 
 private void showRecoveryDialog() {
     EditText input = new EditText(this);
     input.setHint("عبارت خودت را وارد کن؛ جای کلمه گمشده ? بگذار");
