@@ -2,6 +2,7 @@
 package com.walletrescue;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.os.Bundle;
 import android.content.Intent;
 import android.net.Uri;
@@ -80,6 +81,11 @@ public class MainActivity extends Activity {
         checkButton = new Button(this);
         checkButton.setText("CHECK WALLET");
         layout.addView(checkButton);
+        recoveryButton = new Button(this);
+recoveryButton.setText("RECOVER WALLET");
+layout.addView(recoveryButton);
+
+recoveryButton.setOnClickListener(v -> showRecoveryDialog());
 
         historyButton = new Button(this);
         historyButton.setText("TRANSACTION HISTORY");
