@@ -763,9 +763,52 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
                 }
             });
         })
-        .setNegativeButton("انصراف", null)
+                .setNegativeButton("انصراف", null)
         .show();
-        }
+    }
+
+    private void showGeneratePhraseDialog() {
+
+        String[] choices = {"۱۲ کلمه‌ای", "۲۴ کلمه‌ای"};
+
+        new AlertDialog.Builder(this)
+            .setTitle("تولید کیف پول جدید")
+            .setItems(choices, (dialog, which) -> {
+
+                int count = (which == 0) ? 12 : 24;
+
+                executor.execute(() -> {
+                    try {
+                        java.util.List<String> words =
+                            MnemonicGenerator.generate(count);
+
+                        String phrase =
+                            android.text.TextUtils.join(" ", words);
+
+                        runOnUiThread(() ->
+                            new AlertDialog.Builder(this)
+                                .setTitle("عبارت بازیابی جدید")
+                                .setMessage(
+                                    phrase +
+                                    "\n\nاین عبارت را آفلاین و در جای امن نگهداری کن. آن را برای کسی نفرست."
+                                )
+                                .setPositiveButton("بستن", null)
+                                .show()
+                        );
+
+                    } catch (Exception e) {
+                        runOnUiThread(() ->
+                            new AlertDialog.Builder(this)
+                                .setTitle("خطا")
+                                .setMessage(e.getMessage())
+                                .setPositiveButton("بستن", null)
+                                .show()
+                        );
+                    }
+                });
+            })
+            .setNegativeButton("انصراف", null)
+            .show();
     }
 
     @Override
@@ -773,4 +816,4 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
         executor.shutdownNow();
         super.onDestroy();
     }
-                                 }
+    }
