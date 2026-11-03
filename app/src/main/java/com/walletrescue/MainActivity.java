@@ -699,21 +699,47 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
 
     private void showAutoScanDialog() {
         EditText input = new EditText(this);
-        input.setHint("عبارت بازیابی کیف پول خودت (۱۲ یا ۲۴ کلمه)");
+        input.setHint("عبارت بازیابی خودت (۱۲ یا ۲۴ کلمه)");
         input.setSingleLine(false);
         input.setMinLines(3);
 
         new AlertDialog.Builder(this)
-            .setTitle("بررسی خودکار کیف پول")
-            .setMessage("عبارت فقط روی همین گوشی برای مشتق‌سازی آدرس‌ها استفاده می‌شود. آن را در چت یا سایت دیگری وارد نکن.")
+            .setTitle("اسکن کیف پول خودت")
+            .setMessage("عبارت فقط روی گوشی استفاده می‌شود. آن را در چت یا سایت دیگری وارد نکن.")
             .setView(input)
-            .setPositiveButton("شروع اسکن", (dialog, which) -> {
+            .setPositiveButton("ادامه", (dialog, which) -> {
                 String phrase = input.getText().toString().trim();
                 if (!SafeMnemonicRecovery.isValidCompletePhrase(this, phrase)) {
-                    result.setText("عبارت کامل BIP39 معتبر نیست. برای بازیابی یک کلمه گمشده از گزینه RECOVER WALLET استفاده کن.");
+                    result.setText("عبارت BIP39 معتبر نیست.");
                     return;
                 }
-                runTask(() -> AutoWalletScanner.scan(this, phrase));
+                String[] options = {"100 آدرس در هر مسیر", "500 آدرس در هر مسیر", "1000 آدرس در هر مسیر"};
+                new AlertDialog.Builder(this)
+                    .setTitle("حجم اسکن")
+                    .setItems(options, (d, selected) -> {
+                        final int count = selected == 0 ? 100 : selected == 1 ? 500 : 1000;
+                        scanCancelled = false;
+                        autoScanButton.setEnabled(false);
+                        result.setText("اسکن شروع شد...");
+                        executor.execute(() -> {
+                            String response;
+                            try {
+                                response = AutoWalletScanner.scan(this, phrase, count,
+                                    (done, total) -> runOnUiThread(() ->
+                                        result.setText("در حال اسکن " + done + " از " + total)),
+                                    () -> scanCancelled);
+                            } catch (Exception | LinkageError e) {
+                                response = "اسکن متوقف شد: " + e.getClass().getSimpleName();
+                            }
+                            final String out = response;
+                            runOnUiThread(() -> {
+                                result.setText(out);
+                                autoScanButton.setEnabled(true);
+                            });
+                        });
+                    })
+                    .setNegativeButton("انصراف", null)
+                    .show();
             })
             .setNegativeButton("انصراف", null)
             .show();
