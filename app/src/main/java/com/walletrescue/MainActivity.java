@@ -599,7 +599,52 @@ recoveryButton.setOnClickListener(v -> showRecoveryDialog());
         return text.toString();
     }
 
-    @Override
+    @Override 
+private void showRecoveryDialog() {
+    EditText input = new EditText(this);
+    input.setHint("عبارت خودت را وارد کن؛ جای کلمه گمشده ? بگذار");
+    input.setSingleLine(false);
+
+    new AlertDialog.Builder(this)
+        .setTitle("بازیابی کیف پول")
+        .setMessage("فقط عبارت بازیابی متعلق به خودت را وارد کن.")
+        .setView(input)
+        .setPositiveButton("بررسی", (dialog, which) -> {
+            String phrase = input.getText().toString().trim();
+
+            executor.execute(() -> {
+                try {
+                    java.util.List<String> candidates =
+                        SafeMnemonicRecovery.findCandidates(this, phrase);
+
+                    runOnUiThread(() -> {
+                        String message = candidates.isEmpty()
+                            ? "کاندیدای معتبر پیدا نشد."
+                            : "تعداد عبارت‌های معتبر: " + candidates.size()
+                              + "\n\n" + android.text.TextUtils.join("\n\n", candidates);
+
+                        new AlertDialog.Builder(this)
+                            .setTitle("نتیجه بررسی")
+                            .setMessage(message)
+                            .setPositiveButton("بستن", null)
+                            .show();
+                    });
+                } catch (Exception e) {
+                    runOnUiThread(() ->
+                        new AlertDialog.Builder(this)
+                            .setTitle("خطا")
+                            .setMessage("بررسی انجام نشد: " + e.getMessage())
+                            .setPositiveButton("بستن", null)
+                            .show()
+                    );
+                }
+            });
+        })
+        .setNegativeButton("انصراف", null)
+        .show();
+}
+
+    
     protected void onDestroy() {
         executor.shutdownNow();
         super.onDestroy();
