@@ -81,6 +81,11 @@ public class MainActivity extends Activity {
         checkButton = new Button(this);
         checkButton.setText("CHECK WALLET");
         layout.addView(checkButton);
+        bulkScanButton = new Button(this);
+bulkScanButton.setText("BULK ADDRESS SCAN");
+layout.addView(bulkScanButton);
+
+bulkScanButton.setOnClickListener(v -> showBulkScanDialog());
         recoveryButton = new Button(this);
 recoveryButton.setText("RECOVER WALLET");
 layout.addView(recoveryButton);
