@@ -37,7 +37,7 @@ public final class AutoWalletScanner {
     private AutoWalletScanner() {}
 
     public static String scan(Context context, String phrase) throws Exception {
-        return scan(context, phrase, DEFAULT_addressCount);
+        return scan(context, phrase, DEFAULT_ADDRESS_COUNT);
     }
 
     public static String scan(Context context, String phrase, int addressCount) throws Exception {
