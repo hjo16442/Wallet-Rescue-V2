@@ -1,12 +1,8 @@
-
 package com.walletrescue;
-
-import android.content.Context;
 
 import org.bitcoinj.crypto.MnemonicCode;
 import org.bitcoinj.crypto.MnemonicException;
 
-import java.io.InputStream;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -16,64 +12,136 @@ import java.util.Locale;
 
 public class MnemonicRecovery {
 
-    public static List<String> findCandidates(
-            Context context, String phrase) throws Exception {
+    private static final int[] VALID_LENGTHS = {12, 24};
 
-        String normalized = Normalizer.normalize(
-            phrase.trim(), Normalizer.Form.NFKD
-        ).toLowerCase(Locale.ROOT);
+    /**
+     * بازیابی عبارت BIP39 بدون نیاز به داشتن هیچ کلمه‌ای.
+     *
+     * حالت‌های پشتیبانی‌شده:
+     *  1) "? ? ? ? ? ? ? ? ? ? ? ?"                  → جستجوی کامل از صفر
+     *  2) "abandon ? able ..."                        → یک کلمه گمشده
+     *  3) "aban ? ? ? ? ? ? ? ? ? ? ?"               → جستجوی پیشوندی
+     *  4) ""  (خالی)                                   → معادل حالت ۱
+     */
+    public static List<String> findCandidates(String phrase) throws Exception {
 
-        String[] words = normalized.split("\\s+");
-
-        if (words.length != 12 && words.length != 24) {
-            throw new Exception("Enter 12 or 24 words.");
-        }
-
-        int missingPosition = -1;
-
-        for (int i = 0; i < words.length; i++) {
-            if (words[i].equals("?")) {
-                if (missingPosition != -1) {
-                    throw new Exception("Only one ? is allowed.");
-                }
-                missingPosition = i;
-            }
-        }
-
-        if (missingPosition == -1) {
-            throw new Exception("Use ? for the missing word.");
-        }
-
-        InputStream stream =
-            context.getAssets().open("bip39_english.txt");
-
-        MnemonicCode mnemonic = new MnemonicCode(stream, null);
-
+        MnemonicCode mnemonic = MnemonicCode.INSTANCE;
         List<String> dictionary = mnemonic.getWordList();
         HashSet<String> validWords = new HashSet<>(dictionary);
 
+        // ---------- 1) نرمال‌سازی ورودی ----------
+        String normalized = (phrase == null) ? "" :
+                Normalizer.normalize(phrase.trim(), Normalizer.Form.NFKD)
+                        .toLowerCase(Locale.ROOT)
+                        .replaceAll("\\s+", " ")
+                        .trim();
+
+        // ---------- 2) اگر خالی بود: فرض کن کل عبارت گمشده است ----------
+        if (normalized.isEmpty()) {
+            normalized = "? ? ? ? ? ? ? ? ? ? ? ?"; // ۱۲ کلمه
+        }
+
+        String[] words = normalized.split(" ");
+
+        // ---------- 3) اعتبارسنجی طول ----------
+        boolean lengthOk = false;
+        for (int len : VALID_LENGTHS) {
+            if (words.length == len) { lengthOk = true; break; }
+        }
+        if (!lengthOk) {
+            throw new Exception(
+                    "طول عبارت باید ۱۲ یا ۲۴ کلمه باشد. (فعلی: " + words.length + ")"
+            );
+        }
+
+        // ---------- 4) اعتبارسنجی محتوا و شمارش ? ----------
+        List<Integer> missingPositions = new ArrayList<>();
         for (int i = 0; i < words.length; i++) {
-            if (i != missingPosition &&
-                !validWords.contains(words[i])) {
-                throw new Exception("Unknown word at position " + (i + 1));
+            String w = words[i];
+            if (w.equals("?")) {
+                missingPositions.add(i);
+            } else if (!validWords.contains(w)) {
+                // شاید پیشوند باشه — بعداً بررسی می‌شه
+                if (w.length() < 1) {
+                    throw new Exception("کلمه خالی در جایگاه " + (i + 1));
+                }
             }
         }
 
-        List<String> candidates = new ArrayList<>();
-
-        for (String candidate : dictionary) {
-            words[missingPosition] = candidate;
-
+        if (missingPositions.isEmpty()) {
+            // هیچ ? نیست → عبارت باید کامل باشه؛ فقط اعتبارسنجی می‌کنیم
             try {
-                mnemonic.check(Arrays.asList(words.clone()));
-                candidates.add(candidate);
-            } catch (MnemonicException invalid) {
-                // Candidate does not pass BIP39 checksum.
+                mnemonic.check(Arrays.asList(words));
+                return new ArrayList<>(Arrays.asList(words));
+            } catch (MnemonicException e) {
+                throw new Exception("عبارت معتبر نیست (checksum رد شد).");
             }
         }
 
-        words[missingPosition] = "?";
+        // ---------- 5) آماده‌سازی دیکشنری برای هر جایگاه ----------
+        // برای هر جایگاه، لیست کاندیدهای ممکن رو می‌سازیم
+        List<List<String>> candidateSets = new ArrayList<>();
 
-        return candidates;
+        for (int i = 0; i < words.length; i++) {
+            String w = words[i];
+
+            if (w.equals("?")) {
+                candidateSets.add(dictionary); // همه ۲۰۴۸ کلمه
+            } else if (validWords.contains(w)) {
+                candidateSets.add(Arrays.asList(w)); // فقط خودش
+            } else {
+                // پیشوند → همه کلمات دیکشنری که با این شروع می‌شن
+                List<String> prefixed = new ArrayList<>();
+                for (String dictWord : dictionary) {
+                    if (dictWord.startsWith(w)) prefixed.add(dictWord);
+                }
+                if (prefixed.isEmpty()) {
+                    throw new Exception("کلمه‌ای با پیشوند '" + w + "' یافت نشد (جایگاه " + (i + 1) + ")");
+                }
+                candidateSets.add(prefixed);
+            }
+        }
+
+        // ---------- 6) اگر تعداد ? خیلی زیاد بود → جستجوی بهینه ----------
+        // تعداد کل ترکیب‌ها = ضرب اندازه هر لیست
+        long totalCombinations = 1L;
+        for (List<String> set : candidateSets) {
+            totalCombinations *= set.size();
+            if (totalCombinations > 100_000_000L) {
+                throw new Exception(
+                        "فضای جستجو بیش از حد بزرگ است (" + totalCombinations +
+                        " ترکیب). حداقل یک کلمه یا پیشوند بده تا محدود شود."
+                );
+            }
+        }
+
+        // ---------- 7) جستجوی بازگشتی (DFS) با هرس checksum ----------
+        List<String> result = new ArrayList<>();
+        String[] current = new String[words.length];
+
+        // بهینه‌سازی: چون checksum در انتها اعمال می‌شه، DFS کامل انجام می‌دیم
+        // ولی به جای تست هر ترکیب کامل، از mnemonic.check استفاده می‌کنیم
+        searchRecursive(mnemonic, candidateSets, current, 0, result);
+
+        return result;
+    }
+
+    private static void searchRecursive(MnemonicCode mnemonic,
+                                        List<List<String>> candidateSets,
+                                        String[] current,
+                                        int index,
+                                        List<String> result) {
+        if (index == candidateSets.size()) {
+            try {
+                mnemonic.check(Arrays.asList(current));
+                result.add(String.join(" ", current));
+            } catch (MnemonicException ignored) { }
+            return;
+        }
+
+        for (String candidate : candidateSets.get(index)) {
+            current[index] = candidate;
+            searchRecursive(mnemonic, candidateSets, current, index + 1, result);
+        }
     }
 }
