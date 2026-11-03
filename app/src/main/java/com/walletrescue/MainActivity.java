@@ -543,11 +543,17 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
 
             try {
                 response = task.call();
-            } catch (Exception e) {
+            } catch (Exception | LinkageError e) {
+                String detail = e.getMessage();
+                if (detail == null || detail.trim().isEmpty()) {
+                    detail = e.getClass().getSimpleName();
+                } else {
+                    detail = e.getClass().getSimpleName() + ": " + detail;
+                }
                 response =
-                    "Connection error.\n" +
-                    "Details: " + e.getMessage() + "\n\n" +
-                    "Please try again.";
+                    "اسکن با خطا متوقف شد؛ برنامه نباید بسته شود.\n" +
+                    "جزئیات فنی: " + detail + "\n\n" +
+                    "عبارت بازیابی را دوباره در چت یا جای دیگری وارد نکن.";
             }
 
             final String message = response;
