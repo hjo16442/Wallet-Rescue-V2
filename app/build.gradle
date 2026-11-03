@@ -13,6 +13,12 @@ android {
         }
     }
 
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+        coreLibraryDesugaringEnabled true
+    }
+
     defaultConfig {
         applicationId 'com.walletrescue'
         minSdk 24
@@ -27,6 +33,7 @@ configurations.configureEach {
 }
 
 dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
     implementation 'org.bitcoinj:bitcoinj-core:0.16.3'
     implementation 'org.web3j:core:4.12.3-android'
     implementation 'org.web3j:crypto:4.12.3-android'
