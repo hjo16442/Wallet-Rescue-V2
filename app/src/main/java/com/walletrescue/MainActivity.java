@@ -519,6 +519,7 @@ recoveryButton.setOnClickListener(v -> showRecoveryDialog());
         checkButton.setEnabled(false);
         historyButton.setEnabled(false);
         scanButton.setEnabled(false);
+        recoveryButton.setEnabled(false);
         result.setText("Please wait...");
 
         executor.execute(() -> {
@@ -540,6 +541,7 @@ recoveryButton.setOnClickListener(v -> showRecoveryDialog());
                 checkButton.setEnabled(true);
                 historyButton.setEnabled(true);
                 scanButton.setEnabled(true);
+recoveryButton.setEnabled(true);
             });
         });
     }
