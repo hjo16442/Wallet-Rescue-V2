@@ -26,6 +26,8 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.security.MessageDigest;
 import java.util.Arrays;
+import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
 
 public final class AutoWalletScanner {
     private static final int DEFAULT_ADDRESS_COUNT = 100;
@@ -39,6 +41,12 @@ public final class AutoWalletScanner {
     }
 
     public static String scan(Context context, String phrase, int addressCount) throws Exception {
+        return scan(context, phrase, addressCount, (done, total) -> {}, () -> false);
+    }
+
+    public static String scan(Context context, String phrase, int addressCount,
+                              BiConsumer<Integer, Integer> progress,
+                              BooleanSupplier cancelled) throws Exception {
         if (addressCount < 1 || addressCount > 1000) throw new IllegalArgumentException("Address count must be 1-1000.");
         String normalized = phrase.trim().replaceAll("\\s+", " ");
         if (!SafeMnemonicRecovery.isValidCompletePhrase(context, normalized)) {
@@ -65,6 +73,8 @@ public final class AutoWalletScanner {
                 String line = safeBitcoin(address);
                 report.append(line).append("\n");
                 checked++;
+                if (cancelled.getAsBoolean()) throw new InterruptedException("Cancelled by user");
+                progress.accept(checked, addressCount * 4);
                 if (line.contains("موجودی:") && !line.contains("موجودی: 0 BTC")) found++;
             }
 
