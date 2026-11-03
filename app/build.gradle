@@ -28,10 +28,6 @@ android {
     }
 }
 
-configurations.configureEach {
-    exclude group: 'org.bouncycastle', module: 'bcprov-jdk15to18'
-}
-
 dependencies {
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
     implementation 'org.bitcoinj:bitcoinj-core:0.16.3'
