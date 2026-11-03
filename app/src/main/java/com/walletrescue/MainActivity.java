@@ -125,6 +125,7 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
         result.setTextColor(Color.WHITE);
         result.setTextSize(15);
         result.setPadding(0, 20, 0, 0);
+        result.setTextIsSelectable(true); // Long-press an address in results to select and copy it.
         layout.addView(result);
 
         TextView safety = new TextView(this);
