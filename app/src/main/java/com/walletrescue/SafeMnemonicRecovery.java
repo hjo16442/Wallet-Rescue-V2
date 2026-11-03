@@ -20,6 +20,24 @@ public final class SafeMnemonicRecovery {
 
     private SafeMnemonicRecovery() {}
 
+    public static boolean isValidCompletePhrase(Context context, String phrase) {
+        if (context == null || phrase == null) return false;
+        try {
+            String normalized = Normalizer.normalize(
+                phrase.trim(), Normalizer.Form.NFKD
+            ).toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+            String[] words = normalized.split(" ");
+            if (words.length != 12 && words.length != 24) return false;
+            try (InputStream input = context.getAssets().open("bip39_english.txt")) {
+                MnemonicCode mnemonic = new MnemonicCode(input, WORDLIST_SHA256);
+                mnemonic.check(Arrays.asList(words));
+                return true;
+            }
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     public static List<String> findCandidates(
         Context context, String phrase
     ) throws Exception {
