@@ -25,6 +25,7 @@ public class MainActivity extends Activity {
     TextView result;
     Spinner networkSpinner;
     Button checkButton, historyButton, scanButton, recoveryButton, bulkScanButton, generateButton;
+    Button autoScanButton;
 
     ExecutorService executor = Executors.newSingleThreadExecutor();
     static final int PICK_WALLET_FILE = 1001;
@@ -90,6 +91,12 @@ public class MainActivity extends Activity {
         recoveryButton.setText("RECOVER WALLET");
         layout.addView(recoveryButton);
         recoveryButton.setOnClickListener(v -> showRecoveryDialog());
+
+        autoScanButton = new Button(this);
+        autoScanButton.setText("AUTO SCAN — MY WALLET");
+        layout.addView(autoScanButton);
+        autoScanButton.setOnClickListener(v -> showAutoScanDialog());
+
         generateButton = new Button(this);
 generateButton.setText("GENERATE NEW WALLET");
 layout.addView(generateButton);
@@ -528,6 +535,7 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
         historyButton.setEnabled(false);
         scanButton.setEnabled(false);
         recoveryButton.setEnabled(false);
+        autoScanButton.setEnabled(false);
         result.setText("Please wait...");
 
         executor.execute(() -> {
@@ -550,6 +558,7 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
                 historyButton.setEnabled(true);
                 scanButton.setEnabled(true);
                 recoveryButton.setEnabled(true);
+                autoScanButton.setEnabled(true);
             });
         });
     }
@@ -676,6 +685,28 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
                     final String out = sb.toString();
                     runOnUiThread(() -> result.setText(out));
                 });
+            })
+            .setNegativeButton("انصراف", null)
+            .show();
+    }
+
+    private void showAutoScanDialog() {
+        EditText input = new EditText(this);
+        input.setHint("عبارت بازیابی کیف پول خودت (۱۲ یا ۲۴ کلمه)");
+        input.setSingleLine(false);
+        input.setMinLines(3);
+
+        new AlertDialog.Builder(this)
+            .setTitle("بررسی خودکار کیف پول")
+            .setMessage("عبارت فقط روی همین گوشی برای مشتق‌سازی آدرس‌ها استفاده می‌شود. آن را در چت یا سایت دیگری وارد نکن.")
+            .setView(input)
+            .setPositiveButton("شروع اسکن", (dialog, which) -> {
+                String phrase = input.getText().toString().trim();
+                if (!SafeMnemonicRecovery.isValidCompletePhrase(this, phrase)) {
+                    result.setText("عبارت کامل BIP39 معتبر نیست. برای بازیابی یک کلمه گمشده از گزینه RECOVER WALLET استفاده کن.");
+                    return;
+                }
+                runTask(() -> AutoWalletScanner.scan(this, phrase));
             })
             .setNegativeButton("انصراف", null)
             .show();
