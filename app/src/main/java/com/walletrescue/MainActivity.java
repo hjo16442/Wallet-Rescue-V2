@@ -1,4 +1,3 @@
-
 package com.walletrescue;
 
 import android.app.Activity;
@@ -81,16 +80,16 @@ public class MainActivity extends Activity {
         checkButton = new Button(this);
         checkButton.setText("CHECK WALLET");
         layout.addView(checkButton);
+
         bulkScanButton = new Button(this);
-bulkScanButton.setText("BULK ADDRESS SCAN");
-layout.addView(bulkScanButton);
+        bulkScanButton.setText("BULK ADDRESS SCAN");
+        layout.addView(bulkScanButton);
+        bulkScanButton.setOnClickListener(v -> showBulkScanDialog());
 
-bulkScanButton.setOnClickListener(v -> showBulkScanDialog());
         recoveryButton = new Button(this);
-recoveryButton.setText("RECOVER WALLET");
-layout.addView(recoveryButton);
-
-recoveryButton.setOnClickListener(v -> showRecoveryDialog());
+        recoveryButton.setText("RECOVER WALLET");
+        layout.addView(recoveryButton);
+        recoveryButton.setOnClickListener(v -> showRecoveryDialog());
 
         historyButton = new Button(this);
         historyButton.setText("TRANSACTION HISTORY");
@@ -546,7 +545,7 @@ recoveryButton.setOnClickListener(v -> showRecoveryDialog());
                 checkButton.setEnabled(true);
                 historyButton.setEnabled(true);
                 scanButton.setEnabled(true);
-recoveryButton.setEnabled(true);
+                recoveryButton.setEnabled(true);
             });
         });
     }
@@ -605,54 +604,126 @@ recoveryButton.setEnabled(true);
 
         return text.toString();
     }
- 
-private void showRecoveryDialog() {
-    EditText input = new EditText(this);
-    input.setHint("عبارت خودت را وارد کن؛ جای کلمه گمشده ? بگذار");
-    input.setSingleLine(false);
 
-    new AlertDialog.Builder(this)
-        .setTitle("بازیابی کیف پول")
-        .setMessage("فقط عبارت بازیابی متعلق به خودت را وارد کن.")
-        .setView(input)
-        .setPositiveButton("بررسی", (dialog, which) -> {
-            String phrase = input.getText().toString().trim();
+    // ✅ متد گم‌شده که باعث خطای کامپایل شده بود
+    private void showBulkScanDialog() {
+        final EditText input = new EditText(this);
+        input.setHint("هر آدرس را در یک خط جدید وارد کنید");
+        input.setSingleLine(false);
+        input.setMinLines(4);
+        input.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
 
-            executor.execute(() -> {
-                try {
-                    java.util.List<String> candidates =
-                        MnemonicRecovery.findCandidates(phrase);
-
-                    runOnUiThread(() -> {
-                        String message = candidates.isEmpty()
-                            ? "کاندیدای معتبر پیدا نشد."
-                            : "تعداد عبارت‌های معتبر: " + candidates.size()
-                              + "\n\n" + android.text.TextUtils.join("\n\n", candidates);
-
-                        new AlertDialog.Builder(this)
-                            .setTitle("نتیجه بررسی")
-                            .setMessage(message)
-                            .setPositiveButton("بستن", null)
-                            .show();
-                    });
-                } catch (Exception e) {
-                    runOnUiThread(() ->
-                        new AlertDialog.Builder(this)
-                            .setTitle("خطا")
-                            .setMessage("بررسی انجام نشد: " + e.getMessage())
-                            .setPositiveButton("بستن", null)
-                            .show()
-                    );
+        new AlertDialog.Builder(this)
+            .setTitle("Bulk Address Scan")
+            .setMessage("چند آدرس (هر کدام در یک خط) وارد کنید.")
+            .setView(input)
+            .setPositiveButton("بررسی", (dialog, which) -> {
+                String raw = input.getText().toString().trim();
+                if (raw.isEmpty()) {
+                    Toast.makeText(this,
+                        "لیست آدرس خالی است", Toast.LENGTH_SHORT).show();
+                    return;
                 }
-            });
-        })
-        .setNegativeButton("انصراف", null)
-        .show();
-}
 
-    
+                final String[] lines = raw.split("\\r?\\n");
+                final int network = networkSpinner.getSelectedItemPosition();
+
+                result.setText("در حال بررسی " + lines.length + " آدرس...");
+
+                executor.execute(() -> {
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("BULK SCAN RESULT\n\n");
+
+                    for (String line : lines) {
+                        String addr = line.trim();
+                        if (addr.isEmpty()) continue;
+
+                        sb.append(addr).append("\n");
+
+                        if (!validAddress(addr, network)) {
+                            sb.append("  → فرمت نامعتبر\n\n");
+                            continue;
+                        }
+
+                        try {
+                            if (network == 0) {
+                                sb.append("  → ")
+                                  .append(checkBitcoin(addr)
+                                          .replaceAll(".*Balance:\\s*", ""))
+                                  .append("\n\n");
+                            } else if (network == 1) {
+                                sb.append("  → ")
+                                  .append(checkEthereum(addr)
+                                          .replaceAll(".*Balance:\\s*", ""))
+                                  .append("\n\n");
+                            } else {
+                                sb.append("  → ")
+                                  .append(checkTron(addr)
+                                          .replaceAll(".*Balance:\\s*", ""))
+                                  .append("\n\n");
+                            }
+                        } catch (Exception e) {
+                            sb.append("  → خطا: ")
+                              .append(e.getMessage())
+                              .append("\n\n");
+                        }
+                    }
+
+                    final String out = sb.toString();
+                    runOnUiThread(() -> result.setText(out));
+                });
+            })
+            .setNegativeButton("انصراف", null)
+            .show();
+    }
+
+    private void showRecoveryDialog() {
+        EditText input = new EditText(this);
+        input.setHint("عبارت خودت را وارد کن؛ جای کلمه گمشده ? بگذار");
+        input.setSingleLine(false);
+
+        new AlertDialog.Builder(this)
+            .setTitle("بازیابی کیف پول")
+            .setMessage("فقط عبارت بازیابی متعلق به خودت را وارد کن.")
+            .setView(input)
+            .setPositiveButton("بررسی", (dialog, which) -> {
+                String phrase = input.getText().toString().trim();
+
+                executor.execute(() -> {
+                    try {
+                        java.util.List<String> candidates =
+                            MnemonicRecovery.findCandidates(phrase);
+
+                        runOnUiThread(() -> {
+                            String message = candidates.isEmpty()
+                                ? "کاندیدای معتبر پیدا نشد."
+                                : "تعداد عبارت‌های معتبر: " + candidates.size()
+                                  + "\n\n" + android.text.TextUtils.join("\n\n", candidates);
+
+                            new AlertDialog.Builder(this)
+                                .setTitle("نتیجه بررسی")
+                                .setMessage(message)
+                                .setPositiveButton("بستن", null)
+                                .show();
+                        });
+                    } catch (Exception e) {
+                        runOnUiThread(() ->
+                            new AlertDialog.Builder(this)
+                                .setTitle("خطا")
+                                .setMessage("بررسی انجام نشد: " + e.getMessage())
+                                .setPositiveButton("بستن", null)
+                                .show()
+                        );
+                    }
+                });
+            })
+            .setNegativeButton("انصراف", null)
+            .show();
+    }
+
+    @Override
     protected void onDestroy() {
         executor.shutdownNow();
         super.onDestroy();
     }
-}
+                                 }
