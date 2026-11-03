@@ -1,0 +1,1 @@
+Temporary write permission test; this file is being created only to verify repository access.
