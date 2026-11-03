@@ -28,13 +28,18 @@ import java.security.MessageDigest;
 import java.util.Arrays;
 
 public final class AutoWalletScanner {
-    private static final int ADDRESS_COUNT = 5;
+    private static final int DEFAULT_ADDRESS_COUNT = 100;
     private static final char[] BASE58 =
         "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".toCharArray();
 
     private AutoWalletScanner() {}
 
     public static String scan(Context context, String phrase) throws Exception {
+        return scan(context, phrase, DEFAULT_ADDRESS_COUNT);
+    }
+
+    public static String scan(Context context, String phrase, int addressCount) throws Exception {
+        if (addressCount < 1 || addressCount > 1000) throw new IllegalArgumentException("Address count must be 1-1000.");
         String normalized = phrase.trim().replaceAll("\\s+", " ");
         if (!SafeMnemonicRecovery.isValidCompletePhrase(context, normalized)) {
             throw new Exception("عبارت BIP39 معتبر نیست.");
