@@ -18,4 +18,5 @@ android {
 
 dependencies {
     implementation 'org.bitcoinj:bitcoinj-core:0.16.3'
+    implementation 'org.web3j:core:4.12.3-android'
 }
