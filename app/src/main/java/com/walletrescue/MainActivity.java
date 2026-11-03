@@ -616,7 +616,7 @@ private void showRecoveryDialog() {
             executor.execute(() -> {
                 try {
                     java.util.List<String> candidates =
-                        SafeMnemonicRecovery.findCandidates(this, phrase);
+                        MnemonicRecovery.findCandidates(phrase);
 
                     runOnUiThread(() -> {
                         String message = candidates.isEmpty()
