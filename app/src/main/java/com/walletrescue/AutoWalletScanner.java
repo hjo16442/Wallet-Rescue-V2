@@ -70,6 +70,7 @@ public final class AutoWalletScanner {
             for (int i = 0; i < addressCount; i++) {
                 DeterministicKey key = deriveBitcoin(btcMaster, 44, i);
                 String address = LegacyAddress.fromKey(btcParams, key).toString();
+                progress.accept(checked + 1, addressCount * 4); // Show the address currently being checked.
                 String line = safeBitcoin(address);
                 report.append(line).append("\n");
                 checked++;
@@ -82,6 +83,7 @@ public final class AutoWalletScanner {
             for (int i = 0; i < addressCount; i++) {
                 DeterministicKey key = deriveBitcoin(btcMaster, 84, i);
                 String address = SegwitAddress.fromKey(btcParams, key).toString();
+                progress.accept(checked + 1, addressCount * 4); // Show the address currently being checked.
                 String line = safeBitcoin(address);
                 report.append(line).append("\n");
                 checked++;
@@ -97,6 +99,7 @@ public final class AutoWalletScanner {
                     int[] path = {harden(44), harden(60), harden(0), 0, i};
                     Bip32ECKeyPair key = Bip32ECKeyPair.deriveKeyPair(master, path);
                     String address = "0x" + Keys.getAddress(key);
+                    progress.accept(checked + 1, addressCount * 4);
                     String line = checkEthereum(address);
                     report.append(line).append("\n");
                     if (!line.contains("موجودی: 0 ETH")) found++;
@@ -115,6 +118,7 @@ public final class AutoWalletScanner {
                     int[] path = {harden(44), harden(195), harden(0), 0, i};
                     Bip32ECKeyPair key = Bip32ECKeyPair.deriveKeyPair(master, path);
                     String address = tronAddress(key);
+                    progress.accept(checked + 1, addressCount * 4);
                     String line = checkTron(address);
                     report.append(line).append("\n");
                     if (!line.contains("موجودی: 0 TRX")) found++;
