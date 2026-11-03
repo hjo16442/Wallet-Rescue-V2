@@ -743,16 +743,36 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
 
                         String phrase =
                             android.text.TextUtils.join(" ", words);
+                        
+runOnUiThread(() -> {
+    EditText phraseBox = new EditText(this);
+    phraseBox.setText(phrase);
+    phraseBox.setTextIsSelectable(true);
+    phraseBox.setSingleLine(false);
 
-                        runOnUiThread(() ->
-                            new AlertDialog.Builder(this)
-                                .setTitle("عبارت بازیابی جدید")
-                                .setMessage(
-                                    phrase +
-                                    "\n\nاین عبارت را فقط آفلاین و در جای امن نگهداری کن. آن را برای کسی ارسال نکن."
-                                )
-                                .setPositiveButton("بستن", null)
-                                .show()
+    new AlertDialog.Builder(this)
+        .setTitle("عبارت بازیابی جدید")
+        .setMessage("عبارت را در جای امن و آفلاین نگهداری کن.")
+        .setView(phraseBox)
+        .setPositiveButton("کپی عبارت", (d, w) -> {
+            android.content.ClipboardManager clipboard =
+                (android.content.ClipboardManager)
+                getSystemService(CLIPBOARD_SERVICE);
+
+            clipboard.setPrimaryClip(
+                android.content.ClipData.newPlainText(
+                    "Recovery Phrase", phrase
+                )
+            );
+
+            Toast.makeText(
+                this, "عبارت کپی شد", Toast.LENGTH_SHORT
+            ).show();
+        })
+        .setNegativeButton("بستن", null)
+        .show();
+});
+
                         );
 
                     } catch (Exception e) {
