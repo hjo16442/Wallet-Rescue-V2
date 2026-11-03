@@ -153,8 +153,8 @@ public final class AutoWalletScanner {
             connection.setReadTimeout(15000);
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json");
-            String body = "{\\"jsonrpc\\":\\"2.0\\",\\"method\\":\\"eth_getBalance\\","
-                    + "\\"params\\":[\\"" + address + "\\",\\"latest\\"],\\"id\\":1}";
+            String body = "{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"method\\\":\\\"eth_getBalance\\\","
+                    + "\\\"params\\\":[\\\"" + address + "\\\",\\\"latest\\\"],\\\"id\\\":1}";
             try (OutputStream out = connection.getOutputStream()) {
                 out.write(body.getBytes("UTF-8"));
             }
