@@ -97,6 +97,16 @@ public class MainActivity extends Activity {
         autoScanButton.setText("AUTO SCAN — MY WALLET");
         layout.addView(autoScanButton);
         autoScanButton.setOnClickListener(v -> showAutoScanDialog());
+        
+        cancelScanButton = new Button(this);
+        cancelScanButton.setText("لغو اسکن");
+        cancelScanButton.setEnabled(false);
+        layout.addView(cancelScanButton);
+        cancelScanButton.setOnClickListener(v -> {
+            scanCancelled = true;
+            result.setText("درخواست توقف ارسال شد؛ بعد از درخواست جاری متوقف می‌شود.");
+        });
+
 
         generateButton = new Button(this);
 generateButton.setText("GENERATE NEW WALLET");
@@ -719,6 +729,7 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
                     .setItems(options, (d, selected) -> {
                         final int count = selected == 0 ? 100 : selected == 1 ? 500 : 1000;
                         scanCancelled = false;
+                        cancelScanButton.setEnabled(true);
                         autoScanButton.setEnabled(false);
                         result.setText("اسکن شروع شد...");
                         executor.execute(() -> {
@@ -735,6 +746,7 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
                             runOnUiThread(() -> {
                                 result.setText(out);
                                 autoScanButton.setEnabled(true);
+                                cancelScanButton.setEnabled(false);
                             });
                         });
                     })
