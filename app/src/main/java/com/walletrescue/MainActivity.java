@@ -773,7 +773,6 @@ runOnUiThread(() -> {
         .show();
 });
 
-                        );
 
                     } catch (Exception e) {
                         runOnUiThread(() ->
