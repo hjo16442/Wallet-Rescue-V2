@@ -9,7 +9,7 @@ android {
 
     packaging {
         resources {
-            pickFirsts += ['org/bouncycastle/x509/CertPathReviewerMessages_*.properties']
+            pickFirsts += ['org/bouncycastle/x509/CertPathReviewerMessages_*.properties', 'META-INF/DISCLAIMER']
         }
     }
 
@@ -20,6 +20,10 @@ android {
         versionCode 3
         versionName '2.3'
     }
+}
+
+configurations.configureEach {
+    exclude group: 'org.bouncycastle', module: 'bcprov-jdk15to18'
 }
 
 dependencies {
