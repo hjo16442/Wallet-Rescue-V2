@@ -696,7 +696,7 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
                 executor.execute(() -> {
                     try {
                         java.util.List<String> candidates =
-                            MnemonicRecovery.findCandidates(phrase);
+                            SafeMnemonicRecovery.findCandidates(this, phrase);
 
                         runOnUiThread(() -> {
                             String message = candidates.isEmpty()
