@@ -7,6 +7,12 @@ android {
     namespace 'com.walletrescue'
     compileSdk 35
 
+    packaging {
+        resources {
+            pickFirsts += ['org/bouncycastle/x509/CertPathReviewerMessages_*.properties']
+        }
+    }
+
     defaultConfig {
         applicationId 'com.walletrescue'
         minSdk 24
