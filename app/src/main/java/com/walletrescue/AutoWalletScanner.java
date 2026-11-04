@@ -120,7 +120,9 @@ public final class AutoWalletScanner {
                     Bip32ECKeyPair key = Bip32ECKeyPair.deriveKeyPair(master, path);
                     tronAddresses.add(tronAddress(key));
                 }
-                appendParallelResults(report, tronAddresses, AutoWalletScanner::checkTron,
+                String tronApiKey = context.getSharedPreferences("wallet_rescue_settings", Context.MODE_PRIVATE)
+                        .getString("trongrid_api_key", "").trim();
+                appendParallelResults(report, tronAddresses, address -> checkTron(address, tronApiKey),
                         pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 4);
             } finally {
                 pool.shutdownNow();
@@ -302,8 +304,8 @@ public final class AutoWalletScanner {
         }
     }
 
-    private static String checkTron(String address) throws Exception {
-        JSONObject json = getJson("https://api.trongrid.io/v1/accounts/" + address);
+    private static String checkTron(String address, String apiKey) throws Exception {
+        JSONObject json = getTronJson("https://api.trongrid.io/v1/accounts/" + address, apiKey);
         JSONArray data = json.optJSONArray("data");
         long sun = 0;
         if (data != null && data.length() > 0) {
@@ -313,8 +315,8 @@ public final class AutoWalletScanner {
         String activity = "نامشخص";
         String latest = "";
         try {
-            JSONObject history = getJson("https://api.trongrid.io/v1/accounts/" + address
-                    + "/transactions?only_confirmed=true&limit=1&order_by=block_timestamp,desc");
+            JSONObject history = getTronJson("https://api.trongrid.io/v1/accounts/" + address
+                    + "/transactions?only_confirmed=true&limit=1&order_by=block_timestamp,desc", apiKey);
             JSONArray txs = history.optJSONArray("data");
             if (txs != null) {
                 if (txs.length() > 0) {
@@ -358,6 +360,18 @@ public final class AutoWalletScanner {
             else break;
         }
         return out.reverse().toString();
+    }
+
+    private static JSONObject getTronJson(String url, String apiKey) throws Exception {
+        return retry(() -> {
+            HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+            try {
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(15000);
+                if (apiKey != null && !apiKey.isEmpty()) connection.setRequestProperty("TRON-PRO-API-KEY", apiKey);
+                return new JSONObject(readResponse(connection));
+            } finally { connection.disconnect(); }
+        });
     }
 
     private static JSONObject getJson(String url) throws Exception {
