@@ -11,6 +11,10 @@ import android.widget.TextView;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import org.web3j.crypto.MnemonicUtils;
+
+import java.security.SecureRandom;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
@@ -18,7 +22,7 @@ public class MainActivity extends AppCompatActivity {
 
     private EditText inputText;
     private TextView outputText, statusText, speedText;
-    private Button startBtn, stopBtn;
+    private Button startBtn, stopBtn, generate12Btn, generate24Btn;
     private ScrollView outputScroll;
     private MnemonicRecovery engine;
     private long t0;
@@ -36,6 +40,8 @@ public class MainActivity extends AppCompatActivity {
         speedText = findViewById(R.id.speedText);
         startBtn = findViewById(R.id.startBtn);
         stopBtn = findViewById(R.id.stopBtn);
+        generate12Btn = findViewById(R.id.generate12Btn);
+        generate24Btn = findViewById(R.id.generate24Btn);
         outputScroll = findViewById(R.id.outputScroll);
 
         stopBtn.setEnabled(false);
@@ -50,6 +56,33 @@ public class MainActivity extends AppCompatActivity {
 
         startBtn.setOnClickListener(v -> onStartClicked());
         stopBtn.setOnClickListener(v -> onStopClicked());
+        generate12Btn.setOnClickListener(v -> generateMnemonic(16));
+        generate24Btn.setOnClickListener(v -> generateMnemonic(32));
+    }
+
+    // Generate a wallet phrase locally using cryptographically secure entropy.
+    private void generateMnemonic(int entropyBytes) {
+        if (scanning) {
+            statusText.setText("ابتدا بررسی جاری را متوقف کنید.");
+            return;
+        }
+        byte[] entropy = new byte[entropyBytes];
+        try {
+            new SecureRandom().nextBytes(entropy);
+            String phrase = MnemonicUtils.generateMnemonic(entropy);
+            inputText.setText(phrase);
+            inputText.setSelection(inputText.getText().length());
+            outputText.setText("عبارت بازیابی جدید روی همین گوشی تولید شد. آن را روی کاغذ و در مکانی امن نگهداری کنید.\n"
+                    + "این عبارت را برای هیچ‌کس نفرستید و از آن عکس یا نسخه آنلاین نسازید.\n"
+                    + "برای بررسی آدرس‌های همین کیف‌پول در شبکه اصلی، دکمه «شروع بررسی» را جداگانه بزنید.");
+            statusText.setText("عبارت " + (entropyBytes == 16 ? "۱۲" : "۲۴")
+                    + " کلمه‌ای BIP39 تولید شد — فقط روی دستگاه");
+            speedText.setText("تولید آفلاین است؛ هنوز هیچ بررسی شبکه‌ای انجام نشده.");
+        } catch (Exception e) {
+            statusText.setText("تولید عبارت ناموفق بود: " + e.getMessage());
+        } finally {
+            Arrays.fill(entropy, (byte) 0);
+        }
     }
 
     private void onStartClicked() {
