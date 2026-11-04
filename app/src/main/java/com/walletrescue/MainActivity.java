@@ -771,10 +771,45 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
             .show();
     }
 
+    private void startOwnedWalletCheck(String phrase) {
+        scanCancelled = false;
+        cancelScanButton.setEnabled(true);
+        autoScanButton.setEnabled(false);
+        autoScanHits = "";
+        autoScanProgress = "بررسی ۱۰۰ آدرس در هر مسیر برای کیف‌پول تازه‌ساخته‌شده آغاز شد.";
+        renderAutoScanStatus();
+
+        executor.execute(() -> {
+            String response;
+            try {
+                response = AutoWalletScanner.scan(this, phrase, 100,
+                    (done, total) -> {
+                        autoScanProgress = "پیشرفت بررسی: " + done + " از " + total;
+                        runOnUiThread(this::renderAutoScanStatus);
+                    },
+                    () -> scanCancelled,
+                    line -> {
+                        synchronized (MainActivity.this) {
+                            autoScanHits = "🎉 موجودی پیدا شد!\\n" + line + "\\n\\n" + autoScanHits;
+                        }
+                        runOnUiThread(this::renderAutoScanStatus);
+                    });
+            } catch (Exception | LinkageError e) {
+                response = "بررسی کامل نشد: " + e.getClass().getSimpleName();
+            }
+            final String out = response;
+            runOnUiThread(() -> {
+                result.setText((autoScanHits == null || autoScanHits.isEmpty() ? "" : autoScanHits + "\\n--------------------\\n\\n") + out);
+                autoScanButton.setEnabled(true);
+                cancelScanButton.setEnabled(false);
+            });
+        });
+    }
+
     private void renderAutoScanStatus() {
         String hits = autoScanHits;
         String status = autoScanProgress;
-        result.setText((hits == null || hits.isEmpty() ? "" : hits + "\n--------------------\n\n")
+        result.setText((hits == null || hits.isEmpty() ? "" : hits + "\\n--------------------\\n\\n")
                 + (status == null ? "" : status));
     }
 
@@ -824,53 +859,39 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
     }
 
     private void showGeneratePhraseDialog() {
-
         String[] choices = {"۱۲ کلمه‌ای", "۲۴ کلمه‌ای"};
 
         new AlertDialog.Builder(this)
             .setTitle("تولید عبارت بازیابی جدید")
             .setItems(choices, (dialog, which) -> {
-
                 int count = (which == 0) ? 12 : 24;
-
                 executor.execute(() -> {
                     try {
-                        java.util.List<String> words =
-                            MnemonicGenerator.generate(count);
+                        java.util.List<String> words = MnemonicGenerator.generate(count);
+                        String phrase = android.text.TextUtils.join(" ", words);
 
-                        String phrase =
-                            android.text.TextUtils.join(" ", words);
-                        
-runOnUiThread(() -> {
-    EditText phraseBox = new EditText(this);
-    phraseBox.setText(phrase);
-    phraseBox.setTextIsSelectable(true);
-    phraseBox.setSingleLine(false);
+                        runOnUiThread(() -> {
+                            EditText phraseBox = new EditText(this);
+                            phraseBox.setText(phrase);
+                            phraseBox.setTextIsSelectable(true);
+                            phraseBox.setSingleLine(false);
 
-    new AlertDialog.Builder(this)
-        .setTitle("عبارت بازیابی جدید")
-        .setMessage("عبارت را در جای امن و آفلاین نگهداری کن.")
-        .setView(phraseBox)
-        .setPositiveButton("کپی عبارت", (d, w) -> {
-            android.content.ClipboardManager clipboard =
-                (android.content.ClipboardManager)
-                getSystemService(CLIPBOARD_SERVICE);
-
-            clipboard.setPrimaryClip(
-                android.content.ClipData.newPlainText(
-                    "Recovery Phrase", phrase
-                )
-            );
-
-            Toast.makeText(
-                this, "عبارت کپی شد", Toast.LENGTH_SHORT
-            ).show();
-        })
-        .setNegativeButton("بستن", null)
-        .show();
-});
-
-
+                            new AlertDialog.Builder(this)
+                                .setTitle("عبارت بازیابی جدید")
+                                .setMessage("این عبارت یک کیف‌پول تازه و معمولاً بدون موجودی می‌سازد؛ برای بازیابی کیف‌پول قدیمی نیست. آن را آفلاین و محرمانه نگه دار و با هیچ‌کس به اشتراک نگذار.")
+                                .setView(phraseBox)
+                                .setPositiveButton("بررسی همین کیف‌پول", (d, w) -> startOwnedWalletCheck(phrase))
+                                .setNeutralButton("کپی عبارت", (d, w) -> {
+                                    android.content.ClipboardManager clipboard =
+                                        (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                                    clipboard.setPrimaryClip(
+                                        android.content.ClipData.newPlainText("Recovery Phrase", phrase)
+                                    );
+                                    Toast.makeText(this, "عبارت کپی شد", Toast.LENGTH_SHORT).show();
+                                })
+                                .setNegativeButton("بستن", null)
+                                .show();
+                        });
                     } catch (Exception e) {
                         runOnUiThread(() ->
                             new AlertDialog.Builder(this)
