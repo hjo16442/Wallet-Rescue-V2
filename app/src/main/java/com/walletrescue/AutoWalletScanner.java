@@ -7,7 +7,7 @@ import org.bitcoinj.core.SegwitAddress;
 import org.bitcoinj.crypto.ChildNumber;
 import org.bitcoinj.crypto.DeterministicKey;
 import org.bitcoinj.crypto.HDKeyDerivation;
-import org.bitcoinj.params.TestNet3Params;
+import org.bitcoinj.params.MainNetParams;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.web3j.crypto.Bip32ECKeyPair;
@@ -75,11 +75,11 @@ public final class AutoWalletScanner {
         AtomicInteger found = new AtomicInteger(0);
 
         try {
-            report.append("TESTNET RECOVERY CHECK — DERIVED ADDRESSES\n");
+            report.append("MAINNET RECOVERY CHECK — DERIVED ADDRESSES\n");
             report.append("۵ آدرس اول در مسیرهای مشخص‌شده بررسی می‌شوند.\n");
             report.append("عبارت و کلید خصوصی به اینترنت ارسال نمی‌شوند.\n\n");
 
-            NetworkParameters btcParams = TestNet3Params.get();
+            NetworkParameters btcParams = MainNetParams.get();
             DeterministicKey btcMaster = HDKeyDerivation.createMasterPrivateKey(seed);
 
             ExecutorService pool = Executors.newFixedThreadPool(8);
@@ -205,7 +205,7 @@ public final class AutoWalletScanner {
 
     private static String safeBitcoin(String address) {
         try {
-            JSONObject json = getJson("https://mempool.space/testnet/api/address/" + address);
+            JSONObject json = getJson("https://mempool.space/api/address/" + address);
             JSONObject stats = json.optJSONObject("chain_stats");
             long received = stats == null ? 0 : stats.optLong("funded_txo_sum", 0);
             long spent = stats == null ? 0 : stats.optLong("spent_txo_sum", 0);
@@ -221,7 +221,7 @@ public final class AutoWalletScanner {
 
     private static String checkEthereum(String address) throws Exception {
         HttpURLConnection connection = (HttpURLConnection)
-                new URL("https://ethereum-sepolia-rpc.publicnode.com").openConnection();
+                new URL("https://ethereum-rpc.publicnode.com").openConnection();
         try {
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(15000);
@@ -246,7 +246,7 @@ public final class AutoWalletScanner {
     }
 
     private static String checkTron(String address) throws Exception {
-        JSONObject json = getJson("https://nile.trongrid.io/v1/accounts/" + address);
+        JSONObject json = getJson("https://api.trongrid.io/v1/accounts/" + address);
         JSONArray data = json.optJSONArray("data");
         long sun = 0;
         if (data != null && data.length() > 0) {
