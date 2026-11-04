@@ -79,7 +79,7 @@ public class AddressScanner {
                 } else if (network == 1) {
                     result = checkEthereum(address);
                 } else {
-                    result = checkTron(address);
+                    result = checkTron(address, activity);
                 }
 
                 output.append(result)
@@ -203,8 +203,10 @@ public class AddressScanner {
         }
     }
 
-    private static String checkTron(String address) throws Exception {
-        JSONObject json = retry(() -> getJsonOnce("https://api.trongrid.io/v1/accounts/" + address));
+    private static String checkTron(String address, MainActivity activity) throws Exception {
+        String apiKey = activity.getSharedPreferences("wallet_rescue_settings", android.content.Context.MODE_PRIVATE)
+                .getString("trongrid_api_key", "").trim();
+        JSONObject json = retry(() -> getTronJsonOnce("https://api.trongrid.io/v1/accounts/" + address, apiKey));
         JSONArray data = json.optJSONArray("data");
         if (data == null) {
             throw new Exception("پاسخ ناقص از سرویس TRON؛ موجودی نامشخص است");
@@ -222,6 +224,16 @@ public class AddressScanner {
         BigDecimal trx = BigDecimal.valueOf(sun)
                 .divide(new BigDecimal("1000000"), 6, RoundingMode.DOWN);
         return "TRON: " + address + "\nموجودی: " + trx.toPlainString() + " TRX";
+    }
+
+    private static JSONObject getTronJsonOnce(String url, String apiKey) throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        try {
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(15000);
+            if (apiKey != null && !apiKey.isEmpty()) connection.setRequestProperty("TRON-PRO-API-KEY", apiKey);
+            return new JSONObject(readResponse(connection));
+        } finally { connection.disconnect(); }
     }
 
     private static JSONObject getJsonOnce(String url) throws Exception {
