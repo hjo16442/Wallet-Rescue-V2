@@ -149,7 +149,6 @@ public final class AutoWalletScanner {
         List<Future<String>> futures = new ArrayList<>();
         for (String address : addresses) {
             if (cancelled.getAsBoolean()) throw new InterruptedException("Cancelled");
-            progress.accept(checked.get() + 1, total);
             futures.add(pool.submit(() -> {
                 String line;
                 try {
@@ -222,7 +221,19 @@ public final class AutoWalletScanner {
 
     private static String safeBitcoin(String address) {
         try {
-            JSONObject json = getJson("https://mempool.space/api/address/" + address);
+            JSONObject json;
+            String primaryError = "";
+            try {
+                json = getJsonFast("https://mempool.space/api/address/" + address);
+            } catch (Exception first) {
+                primaryError = String.valueOf(first.getMessage());
+                try {
+                    json = getJsonFast("https://blockstream.info/api/address/" + address);
+                } catch (Exception second) {
+                    throw new Exception("سرویس‌های BTC در دسترس نیستند؛ mempool: "
+                            + primaryError + "؛ blockstream: " + second.getMessage());
+                }
+            }
             JSONObject stats = json.optJSONObject("chain_stats");
             JSONObject mempool = json.optJSONObject("mempool_stats");
             if (stats == null || mempool == null) {
@@ -372,6 +383,17 @@ public final class AutoWalletScanner {
                 return new JSONObject(readResponse(connection));
             } finally { connection.disconnect(); }
         });
+    }
+
+    private static JSONObject getJsonFast(String url) throws Exception {
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        try {
+            connection.setConnectTimeout(6000);
+            connection.setReadTimeout(6000);
+            return new JSONObject(readResponse(connection));
+        } finally {
+            connection.disconnect();
+        }
     }
 
     private static JSONObject getJson(String url) throws Exception {
