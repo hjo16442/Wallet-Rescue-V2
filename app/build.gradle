@@ -28,8 +28,19 @@ android {
     }
 }
 
+
 configurations.configureEach {
     exclude group: 'org.bouncycastle', module: 'bcprov-jdk15to18'
+}
+
+configurations.configureEach {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == 'org.jetbrains.kotlin' &&
+            details.requested.name in ['kotlin-stdlib', 'kotlin-stdlib-jdk7', 'kotlin-stdlib-jdk8']) {
+            details.useVersion '1.8.22'
+            details.because 'Align Kotlin standard library modules to avoid duplicate classes'
+        }
+    }
 }
 
 dependencies {
