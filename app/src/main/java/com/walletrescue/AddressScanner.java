@@ -66,9 +66,9 @@ public class AddressScanner {
             if (address.isEmpty()) continue;
 
             if (!validAddress(address, network)) {
-                output.append("آدرس نامعتبر یا با قالب نادرست:\\n")
+                output.append("آدرس نامعتبر یا با قالب نادرست:\n")
                       .append(address)
-                      .append("\\n------------------\\n");
+                      .append("\n------------------\n");
                 continue;
             }
 
@@ -83,19 +83,19 @@ public class AddressScanner {
                 }
 
                 output.append(result)
-                      .append("\\n\\n------------------\\n");
+                      .append("\n\n------------------\n");
                 checked++;
             } catch (Exception e) {
                 output.append(address)
-                      .append("\\nوضعیت: دریافت اطلاعات ناموفق؛ موجودی نامشخص است")
-                      .append("\\nجزئیات خطا: ")
+                      .append("\nوضعیت: دریافت اطلاعات ناموفق؛ موجودی نامشخص است")
+                      .append("\nجزئیات خطا: ")
                       .append(e.getMessage() == null ? "خطای ارتباط با سرویس" : e.getMessage())
-                      .append("\\n------------------\\n");
+                      .append("\n------------------\n");
             }
         }
 
-        output.append("\\nتعداد آدرس‌های بررسی‌شده: ").append(checked);
-        output.append("\\nاین گزارش فقط اطلاعات عمومی بلاک‌چین را می‌خواند؛");
+        output.append("\nتعداد آدرس‌های بررسی‌شده: ").append(checked);
+        output.append("\nاین گزارش فقط اطلاعات عمومی بلاک‌چین را می‌خواند؛");
         output.append(" هیچ تراکنش یا انتقالی انجام نمی‌دهد.");
         return output.toString();
     }
@@ -150,10 +150,10 @@ public class AddressScanner {
         BigDecimal total = satsToBtc(totalSats);
 
         return "Bitcoin: " + address
-                + "\\nموجودی تأییدشده: " + confirmed.toPlainString() + " BTC"
-                + "\\nموجودی در انتظار تأیید: " + pending.toPlainString() + " BTC"
-                + "\\nمجموع موجودی: " + total.toPlainString() + " BTC"
-                + "\\nتعداد تراکنش‌های تأییدشده: " + txCount;
+                + "\nموجودی تأییدشده: " + confirmed.toPlainString() + " BTC"
+                + "\nموجودی در انتظار تأیید: " + pending.toPlainString() + " BTC"
+                + "\nمجموع موجودی: " + total.toPlainString() + " BTC"
+                + "\nتعداد تراکنش‌های تأییدشده: " + txCount;
     }
 
     private static BigDecimal satsToBtc(long sats) {
@@ -179,7 +179,7 @@ public class AddressScanner {
         BigDecimal eth = new BigDecimal(wei).divide(
                 new BigDecimal("1000000000000000000"), 18, RoundingMode.DOWN);
 
-        return "Ethereum: " + address + "\\nموجودی: " + eth.toPlainString() + " ETH";
+        return "Ethereum: " + address + "\nموجودی: " + eth.toPlainString() + " ETH";
     }
 
     private static JSONObject ethereumBalanceRequest(String address) throws Exception {
@@ -192,8 +192,8 @@ public class AddressScanner {
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json");
 
-            String body = "{\\"jsonrpc\\":\\"2.0\\",\\"method\\":\\"eth_getBalance\\","
-                    + "\\"params\\":[\\"" + address + "\\",\\"latest\\"],\\"id\\":1}";
+            String body = "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getBalance\","
+                    + "\"params\":[\"" + address + "\",\"latest\"],\"id\":1}";
             try (OutputStream out = connection.getOutputStream()) {
                 out.write(body.getBytes("UTF-8"));
             }
@@ -221,7 +221,7 @@ public class AddressScanner {
 
         BigDecimal trx = BigDecimal.valueOf(sun)
                 .divide(new BigDecimal("1000000"), 6, RoundingMode.DOWN);
-        return "TRON: " + address + "\\nموجودی: " + trx.toPlainString() + " TRX";
+        return "TRON: " + address + "\nموجودی: " + trx.toPlainString() + " TRX";
     }
 
     private static JSONObject getJsonOnce(String url) throws Exception {
