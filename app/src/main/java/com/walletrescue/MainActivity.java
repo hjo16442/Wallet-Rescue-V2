@@ -177,13 +177,13 @@ public class MainActivity extends AppCompatActivity {
         stopBtn.setEnabled(true);
         outputText.setText("بررسی آدرس‌های مشتق‌شده شروع شد...\n");
         statusText.setText("در حال بررسی BTC، ETH و TRON...");
-        speedText.setText("۰ از ۸۰ آدرس");
+        speedText.setText("۰ از ۴۰۰۰ آدرس");
         new Thread(() -> {
             try {
                 String report = AutoWalletScanner.scan(
                         getApplicationContext(),
                         phrase,
-                        20,
+                        1000,
                         (done, total) -> runOnUiThread(() -> {
                             if (!scanCancelled) {
                                 statusText.setText("در حال بررسی شبکه‌ها...");
