@@ -102,7 +102,11 @@ public final class AutoWalletScanner {
                 checked++;
                 if (cancelled.getAsBoolean()) throw new InterruptedException("Cancelled by user");
                 progress.accept(checked, addressCount * 4);
-                if (line.contains("موجودی:") && !line.contains("موجودی: 0 BTC")) found++;
+                if (hasPositiveBalance(line)) {
+                    found++;
+                    foundReport.append(line).append("\n\n");
+                    foundCallback.accept(line);
+                }
             }
 
             Bip32ECKeyPair master = Bip32ECKeyPair.generateKeyPair(seed);
