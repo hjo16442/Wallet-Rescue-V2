@@ -96,7 +96,7 @@ public class MainActivity extends Activity {
         recoveryButton.setOnClickListener(v -> showRecoveryDialog());
 
         autoScanButton = new Button(this);
-        autoScanButton.setText("AUTO SCAN — MY WALLET");
+        autoScanButton.setText("TESTNET CHECK — MY WALLET");
         layout.addView(autoScanButton);
         autoScanButton.setOnClickListener(v -> showAutoScanDialog());
         
@@ -718,8 +718,8 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
         input.setMinLines(3);
 
         new AlertDialog.Builder(this)
-            .setTitle("اسکن کیف پول خودت")
-            .setMessage("عبارت فقط روی گوشی استفاده می‌شود. آن را در چت یا سایت دیگری وارد نکن.")
+            .setTitle("بررسی آزمایشی کیف پول خودت")
+            .setMessage("فقط عبارت بازیابی متعلق به خودت را وارد کن. آدرس‌های مشتق‌شده روی شبکه‌های آزمایشی BTC، Sepolia و TRON Nile بررسی می‌شوند؛ عبارت از گوشی خارج نمی‌شود.")
             .setView(input)
             .setPositiveButton("ادامه", (dialog, which) -> {
                 String phrase = input.getText().toString().trim();
@@ -736,7 +736,7 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
                         cancelScanButton.setEnabled(true);
                         autoScanButton.setEnabled(false);
                         autoScanHits = "";
-                        autoScanProgress = "اسکن شروع شد؛ آدرس‌های دارای موجودی به محض پیدا شدن نمایش داده می‌شوند.";
+                        autoScanProgress = "بررسی شبکه‌های آزمایشی شروع شد؛ نتیجه‌ها به محض دریافت نمایش داده می‌شوند.";
                         renderAutoScanStatus();
                         executor.execute(() -> {
                             String response;
