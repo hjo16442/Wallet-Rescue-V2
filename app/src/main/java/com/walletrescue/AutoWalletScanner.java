@@ -28,6 +28,7 @@ import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 public final class AutoWalletScanner {
     private static final int DEFAULT_ADDRESS_COUNT = 100;
@@ -47,6 +48,13 @@ public final class AutoWalletScanner {
     public static String scan(Context context, String phrase, int addressCount,
                               BiConsumer<Integer, Integer> progress,
                               BooleanSupplier cancelled) throws Exception {
+        return scan(context, phrase, addressCount, progress, cancelled, line -> {});
+    }
+
+    public static String scan(Context context, String phrase, int addressCount,
+                              BiConsumer<Integer, Integer> progress,
+                              BooleanSupplier cancelled,
+                              Consumer<String> foundCallback) throws Exception {
         if (addressCount < 1 || addressCount > 1000) throw new IllegalArgumentException("Address count must be 1-1000.");
         String normalized = phrase.trim().replaceAll("\\s+", " ");
         if (!SafeMnemonicRecovery.isValidCompletePhrase(context, normalized)) {
@@ -55,6 +63,7 @@ public final class AutoWalletScanner {
 
         byte[] seed = MnemonicUtils.generateSeed(normalized, "");
         StringBuilder report = new StringBuilder();
+        StringBuilder foundReport = new StringBuilder();
         int checked = 0;
         int found = 0;
 
@@ -76,7 +85,11 @@ public final class AutoWalletScanner {
                 checked++;
                 if (cancelled.getAsBoolean()) throw new InterruptedException("Cancelled by user");
                 progress.accept(checked, addressCount * 4);
-                if (line.contains("موجودی:") && !line.contains("موجودی: 0 BTC")) found++;
+                if (hasPositiveBalance(line)) {
+                    found++;
+                    foundReport.append(line).append("\n\n");
+                    foundCallback.accept(line);
+                }
             }
 
             report.append("\nBITCOIN — BIP84 (Native SegWit)\n");
@@ -102,7 +115,11 @@ public final class AutoWalletScanner {
                     progress.accept(checked + 1, addressCount * 4);
                     String line = checkEthereum(address);
                     report.append(line).append("\n");
-                    if (!line.contains("موجودی: 0 ETH")) found++;
+                    if (hasPositiveBalance(line)) {
+                        found++;
+                        foundReport.append(line).append("\n\n");
+                        foundCallback.accept(line);
+                    }
                 } catch (Exception e) {
                     report.append("ETH آدرس ").append(i).append(": خطا در بررسی (")
                             .append(e.getMessage()).append(")\n");
@@ -121,7 +138,11 @@ public final class AutoWalletScanner {
                     progress.accept(checked + 1, addressCount * 4);
                     String line = checkTron(address);
                     report.append(line).append("\n");
-                    if (!line.contains("موجودی: 0 TRX")) found++;
+                    if (hasPositiveBalance(line)) {
+                        found++;
+                        foundReport.append(line).append("\n\n");
+                        foundCallback.accept(line);
+                    }
                 } catch (Exception e) {
                     report.append("TRON آدرس ").append(i).append(": خطا در بررسی (")
                             .append(e.getMessage()).append(")\n");
@@ -131,12 +152,29 @@ public final class AutoWalletScanner {
                 progress.accept(checked, addressCount * 4);
             }
 
+            if (found > 0) {
+                report.insert(0, "🎉 آدرس‌های دارای موجودی (اولویت نمایش)\n\n" + foundReport + "\n--------------------\n\n");
+            }
             report.append("\nپایان بررسی: ").append(checked).append(" آدرس مشتق‌شده");
             report.append("\nآدرس‌های دارای موجودی غیرصفر: ").append(found);
             report.append("\n\nاین بررسی همه مسیرها یا همه کیف‌پول‌های جهان را پوشش نمی‌دهد.");
             return report.toString();
         } finally {
             Arrays.fill(seed, (byte) 0);
+        }
+    }
+
+    private static boolean hasPositiveBalance(String line) {
+        int marker = line.indexOf("موجودی: ");
+        if (marker < 0) return false;
+        int start = marker + "موجودی: ".length();
+        int end = start;
+        while (end < line.length() && (Character.isDigit(line.charAt(end)) || line.charAt(end) == '.')) end++;
+        if (end == start) return false;
+        try {
+            return new BigDecimal(line.substring(start, end)).compareTo(BigDecimal.ZERO) > 0;
+        } catch (NumberFormatException ignored) {
+            return false;
         }
     }
 
