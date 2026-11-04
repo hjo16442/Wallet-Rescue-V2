@@ -29,6 +29,13 @@ import java.util.Arrays;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.ArrayList;
+import java.util.List;
 
 public final class AutoWalletScanner {
     private static final int DEFAULT_ADDRESS_COUNT = 100;
@@ -64,8 +71,8 @@ public final class AutoWalletScanner {
         byte[] seed = MnemonicUtils.generateSeed(normalized, "");
         StringBuilder report = new StringBuilder();
         StringBuilder foundReport = new StringBuilder();
-        int checked = 0;
-        int found = 0;
+        AtomicInteger checked = new AtomicInteger(0);
+        AtomicInteger found = new AtomicInteger(0);
 
         try {
             report.append("AUTO SCAN — DERIVED ADDRESSES\n");
@@ -75,88 +82,51 @@ public final class AutoWalletScanner {
             NetworkParameters btcParams = MainNetParams.get();
             DeterministicKey btcMaster = HDKeyDerivation.createMasterPrivateKey(seed);
 
-            report.append("BITCOIN — BIP44 (Legacy)\n");
-            for (int i = 0; i < addressCount; i++) {
-                DeterministicKey key = deriveBitcoin(btcMaster, 44, i);
-                String address = LegacyAddress.fromKey(btcParams, key).toString();
-                progress.accept(checked + 1, addressCount * 4); // Show the address currently being checked.
-                String line = safeBitcoin(address);
-                report.append(line).append("\n");
-                checked++;
-                if (cancelled.getAsBoolean()) throw new InterruptedException("Cancelled by user");
-                progress.accept(checked, addressCount * 4);
-                if (hasPositiveBalance(line)) {
-                    found++;
-                    foundReport.append(line).append("\n\n");
-                    foundCallback.accept(line);
+            ExecutorService pool = Executors.newFixedThreadPool(8);
+            try {
+                report.append("BITCOIN — BIP44 (Legacy)\\n");
+                List<String> legacyAddresses = new ArrayList<>();
+                for (int i = 0; i < addressCount; i++) {
+                    DeterministicKey key = deriveBitcoin(btcMaster, 44, i);
+                    legacyAddresses.add(LegacyAddress.fromKey(btcParams, key).toString());
                 }
-            }
+                appendParallelResults(report, legacyAddresses, AutoWalletScanner::safeBitcoin,
+                        pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 4);
 
-            report.append("\nBITCOIN — BIP84 (Native SegWit)\n");
-            for (int i = 0; i < addressCount; i++) {
-                DeterministicKey key = deriveBitcoin(btcMaster, 84, i);
-                String address = SegwitAddress.fromKey(btcParams, key).toString();
-                progress.accept(checked + 1, addressCount * 4); // Show the address currently being checked.
-                String line = safeBitcoin(address);
-                report.append(line).append("\n");
-                checked++;
-                if (cancelled.getAsBoolean()) throw new InterruptedException("Cancelled by user");
-                progress.accept(checked, addressCount * 4);
-                if (hasPositiveBalance(line)) {
-                    found++;
-                    foundReport.append(line).append("\n\n");
-                    foundCallback.accept(line);
+                report.append("\\nBITCOIN — BIP84 (Native SegWit)\\n");
+                List<String> segwitAddresses = new ArrayList<>();
+                for (int i = 0; i < addressCount; i++) {
+                    DeterministicKey key = deriveBitcoin(btcMaster, 84, i);
+                    segwitAddresses.add(SegwitAddress.fromKey(btcParams, key).toString());
                 }
-            }
+                appendParallelResults(report, segwitAddresses, AutoWalletScanner::safeBitcoin,
+                        pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 4);
 
-            Bip32ECKeyPair master = Bip32ECKeyPair.generateKeyPair(seed);
-            report.append("\nETHEREUM — m/44'/60'/0'/0/i\n");
-            for (int i = 0; i < addressCount; i++) {
-                try {
+                Bip32ECKeyPair master = Bip32ECKeyPair.generateKeyPair(seed);
+                report.append("\\nETHEREUM — m/44'/60'/0'/0/i\\n");
+                List<String> ethAddresses = new ArrayList<>();
+                for (int i = 0; i < addressCount; i++) {
                     int[] path = {harden(44), harden(60), harden(0), 0, i};
                     Bip32ECKeyPair key = Bip32ECKeyPair.deriveKeyPair(master, path);
-                    String address = "0x" + Keys.getAddress(key);
-                    progress.accept(checked + 1, addressCount * 4);
-                    String line = checkEthereum(address);
-                    report.append(line).append("\n");
-                    if (hasPositiveBalance(line)) {
-                        found++;
-                        foundReport.append(line).append("\n\n");
-                        foundCallback.accept(line);
-                    }
-                } catch (Exception e) {
-                    report.append("ETH آدرس ").append(i).append(": خطا در بررسی (")
-                            .append(e.getMessage()).append(")\n");
+                    ethAddresses.add("0x" + Keys.getAddress(key));
                 }
-                checked++;
-                if (cancelled.getAsBoolean()) throw new InterruptedException("Cancelled by user");
-                progress.accept(checked, addressCount * 4);
-            }
+                appendParallelResults(report, ethAddresses, AutoWalletScanner::checkEthereum,
+                        pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 4);
 
-            report.append("\nTRON — m/44'/195'/0'/0/i\n");
-            for (int i = 0; i < addressCount; i++) {
-                try {
+                report.append("\\nTRON — m/44'/195'/0'/0/i\\n");
+                List<String> tronAddresses = new ArrayList<>();
+                for (int i = 0; i < addressCount; i++) {
                     int[] path = {harden(44), harden(195), harden(0), 0, i};
                     Bip32ECKeyPair key = Bip32ECKeyPair.deriveKeyPair(master, path);
-                    String address = tronAddress(key);
-                    progress.accept(checked + 1, addressCount * 4);
-                    String line = checkTron(address);
-                    report.append(line).append("\n");
-                    if (hasPositiveBalance(line)) {
-                        found++;
-                        foundReport.append(line).append("\n\n");
-                        foundCallback.accept(line);
-                    }
-                } catch (Exception e) {
-                    report.append("TRON آدرس ").append(i).append(": خطا در بررسی (")
-                            .append(e.getMessage()).append(")\n");
+                    tronAddresses.add(tronAddress(key));
                 }
-                checked++;
-                if (cancelled.getAsBoolean()) throw new InterruptedException("Cancelled by user");
-                progress.accept(checked, addressCount * 4);
+                appendParallelResults(report, tronAddresses, AutoWalletScanner::checkTron,
+                        pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 4);
+            } finally {
+                pool.shutdownNow();
             }
 
-            if (found > 0) {
+            if (found.get() > 0) {
                 report.insert(0, "🎉 آدرس‌های دارای موجودی (اولویت نمایش)\n\n" + foundReport + "\n--------------------\n\n");
             }
             report.append("\nپایان بررسی: ").append(checked).append(" آدرس مشتق‌شده");
@@ -166,6 +136,44 @@ public final class AutoWalletScanner {
         } finally {
             Arrays.fill(seed, (byte) 0);
         }
+    }
+
+    private static void appendParallelResults(
+            StringBuilder report, List<String> addresses, CallableCheck checker,
+            ExecutorService pool, BiConsumer<Integer, Integer> progress,
+            BooleanSupplier cancelled, Consumer<String> foundCallback,
+            StringBuilder foundReport, AtomicInteger checked, AtomicInteger found,
+            int total) throws Exception {
+        List<Future<String>> futures = new ArrayList<>();
+        for (String address : addresses) {
+            if (cancelled.getAsBoolean()) throw new InterruptedException("Cancelled");
+            progress.accept(checked.get() + 1, total);
+            futures.add(pool.submit(() -> {
+                String line;
+                try {
+                    line = checker.check(address);
+                } catch (Exception e) {
+                    line = address + "\\nخطا در بررسی: " + e.getMessage();
+                }
+                if (hasPositiveBalance(line)) {
+                    found.incrementAndGet();
+                    synchronized (foundReport) { foundReport.append(line).append("\\n\\n"); }
+                    foundCallback.accept(line);
+                }
+                int done = checked.incrementAndGet();
+                progress.accept(done, total);
+                return line;
+            }));
+        }
+        for (Future<String> future : futures) {
+            if (cancelled.getAsBoolean()) throw new InterruptedException("Cancelled");
+            report.append(future.get()).append("\\n");
+        }
+    }
+
+    @FunctionalInterface
+    private interface CallableCheck {
+        String check(String address) throws Exception;
     }
 
     private static boolean hasPositiveBalance(String line) {
