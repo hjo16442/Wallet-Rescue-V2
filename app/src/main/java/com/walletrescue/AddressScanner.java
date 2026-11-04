@@ -20,6 +20,7 @@ import java.util.regex.Pattern;
 public class AddressScanner {
 
     private static final int MAX_ADDRESSES = 20;
+    private static final int MAX_ATTEMPTS = 3;
 
     private static final Pattern BTC_LEGACY =
             Pattern.compile("^(1|3)[a-km-zA-HJ-NP-Z1-9]{25,34}$");
@@ -32,6 +33,10 @@ public class AddressScanner {
 
     private static final char[] BASE58 =
             "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".toCharArray();
+
+    private interface Request<T> {
+        T run() throws Exception;
+    }
 
     private AddressScanner() {}
 
@@ -61,9 +66,9 @@ public class AddressScanner {
             if (address.isEmpty()) continue;
 
             if (!validAddress(address, network)) {
-                output.append("آدرس نامعتبر یا با قالب نادرست:\n")
+                output.append("آدرس نامعتبر یا با قالب نادرست:\\n")
                       .append(address)
-                      .append("\n------------------\n");
+                      .append("\\n------------------\\n");
                 continue;
             }
 
@@ -78,18 +83,19 @@ public class AddressScanner {
                 }
 
                 output.append(result)
-                      .append("\n\n------------------\n");
+                      .append("\\n\\n------------------\\n");
                 checked++;
             } catch (Exception e) {
                 output.append(address)
-                      .append("\nخطا در دریافت اطلاعات: ")
-                      .append(e.getMessage())
-                      .append("\n------------------\n");
+                      .append("\\nوضعیت: دریافت اطلاعات ناموفق؛ موجودی نامشخص است")
+                      .append("\\nجزئیات خطا: ")
+                      .append(e.getMessage() == null ? "خطای ارتباط با سرویس" : e.getMessage())
+                      .append("\\n------------------\\n");
             }
         }
 
-        output.append("\nتعداد آدرس‌های بررسی‌شده: ").append(checked);
-        output.append("\nاین گزارش فقط اطلاعات عمومی بلاک‌چین را می‌خواند؛");
+        output.append("\\nتعداد آدرس‌های بررسی‌شده: ").append(checked);
+        output.append("\\nاین گزارش فقط اطلاعات عمومی بلاک‌چین را می‌خواند؛");
         output.append(" هیچ تراکنش یا انتقالی انجام نمی‌دهد.");
         return output.toString();
     }
@@ -122,25 +128,61 @@ public class AddressScanner {
     }
 
     private static String checkBitcoin(String address) throws Exception {
-        JSONObject json = getJson("https://mempool.space/api/address/" + address);
+        JSONObject json = retry(() -> getJsonOnce("https://mempool.space/api/address/" + address));
         JSONObject chain = json.optJSONObject("chain_stats");
         JSONObject mempool = json.optJSONObject("mempool_stats");
+        if (chain == null || mempool == null) {
+            throw new Exception("پاسخ ناقص از سرویس بیت‌کوین؛ موجودی قابل تأیید نیست");
+        }
 
-        long received = chain == null ? 0 : chain.optLong("funded_txo_sum", 0);
-        long spent = chain == null ? 0 : chain.optLong("spent_txo_sum", 0);
-        long pendingReceived = mempool == null ? 0 : mempool.optLong("funded_txo_sum", 0);
-        long pendingSpent = mempool == null ? 0 : mempool.optLong("spent_txo_sum", 0);
-        long txCount = chain == null ? 0 : chain.optLong("tx_count", 0);
-        long balanceSats = received - spent + pendingReceived - pendingSpent;
+        long received = chain.getLong("funded_txo_sum");
+        long spent = chain.getLong("spent_txo_sum");
+        long pendingReceived = mempool.getLong("funded_txo_sum");
+        long pendingSpent = mempool.getLong("spent_txo_sum");
+        long txCount = chain.optLong("tx_count", 0);
 
-        BigDecimal btc = BigDecimal.valueOf(balanceSats)
-                .divide(new BigDecimal("100000000"), 8, RoundingMode.DOWN);
+        long confirmedSats = received - spent;
+        long pendingSats = pendingReceived - pendingSpent;
+        long totalSats = confirmedSats + pendingSats;
+
+        BigDecimal confirmed = satsToBtc(confirmedSats);
+        BigDecimal pending = satsToBtc(pendingSats);
+        BigDecimal total = satsToBtc(totalSats);
+
         return "Bitcoin: " + address
-                + "\nموجودی: " + btc.toPlainString() + " BTC"
-                + "\nتعداد تراکنش‌های تأییدشده: " + txCount;
+                + "\\nموجودی تأییدشده: " + confirmed.toPlainString() + " BTC"
+                + "\\nموجودی در انتظار تأیید: " + pending.toPlainString() + " BTC"
+                + "\\nمجموع موجودی: " + total.toPlainString() + " BTC"
+                + "\\nتعداد تراکنش‌های تأییدشده: " + txCount;
+    }
+
+    private static BigDecimal satsToBtc(long sats) {
+        return BigDecimal.valueOf(sats)
+                .divide(new BigDecimal("100000000"), 8, RoundingMode.DOWN);
     }
 
     private static String checkEthereum(String address) throws Exception {
+        JSONObject json = retry(() -> ethereumBalanceRequest(address));
+        if (json.has("error")) {
+            throw new Exception("سرویس اتریوم خطای RPC برگرداند");
+        }
+        if (!json.has("result")) {
+            throw new Exception("پاسخ ناقص از سرویس اتریوم؛ موجودی نامشخص است");
+        }
+
+        String hex = json.optString("result", "");
+        if (!hex.matches("^0x[0-9a-fA-F]+$")) {
+            throw new Exception("مقدار موجودی اتریوم در پاسخ نامعتبر است");
+        }
+
+        BigInteger wei = new BigInteger(hex.substring(2), 16);
+        BigDecimal eth = new BigDecimal(wei).divide(
+                new BigDecimal("1000000000000000000"), 18, RoundingMode.DOWN);
+
+        return "Ethereum: " + address + "\\nموجودی: " + eth.toPlainString() + " ETH";
+    }
+
+    private static JSONObject ethereumBalanceRequest(String address) throws Exception {
         HttpURLConnection connection = (HttpURLConnection)
                 new URL("https://ethereum-rpc.publicnode.com").openConnection();
         try {
@@ -150,46 +192,39 @@ public class AddressScanner {
             connection.setDoOutput(true);
             connection.setRequestProperty("Content-Type", "application/json");
 
-            String body = "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getBalance\","
-                    + "\"params\":[\"" + address + "\",\"latest\"],\"id\":1}";
+            String body = "{\\"jsonrpc\\":\\"2.0\\",\\"method\\":\\"eth_getBalance\\","
+                    + "\\"params\\":[\\"" + address + "\\",\\"latest\\"],\\"id\\":1}";
             try (OutputStream out = connection.getOutputStream()) {
                 out.write(body.getBytes("UTF-8"));
             }
-
-            JSONObject json = new JSONObject(readResponse(connection));
-            if (json.has("error")) {
-                throw new Exception("پاسخ خطای سرویس اتریوم");
-            }
-
-            String hex = json.optString("result", "0x0");
-            if (!hex.startsWith("0x") || hex.length() < 3) {
-                throw new Exception("پاسخ نامعتبر از سرویس اتریوم");
-            }
-
-            BigInteger wei = new BigInteger(hex.substring(2), 16);
-            BigDecimal eth = new BigDecimal(wei).divide(
-                    new BigDecimal("1000000000000000000"), 18, RoundingMode.DOWN);
-
-            return "Ethereum: " + address + "\nموجودی: " + eth.toPlainString() + " ETH";
+            return new JSONObject(readResponse(connection));
         } finally {
             connection.disconnect();
         }
     }
 
     private static String checkTron(String address) throws Exception {
-        JSONObject json = getJson("https://api.trongrid.io/v1/accounts/" + address);
+        JSONObject json = retry(() -> getJsonOnce("https://api.trongrid.io/v1/accounts/" + address));
         JSONArray data = json.optJSONArray("data");
+        if (data == null) {
+            throw new Exception("پاسخ ناقص از سرویس TRON؛ موجودی نامشخص است");
+        }
+
         long sun = 0;
-        if (data != null && data.length() > 0) {
-            sun = data.getJSONObject(0).optLong("balance", 0);
+        if (data.length() > 0) {
+            JSONObject account = data.optJSONObject(0);
+            if (account == null || !account.has("balance")) {
+                throw new Exception("اطلاعات موجودی حساب TRON در پاسخ وجود ندارد");
+            }
+            sun = account.getLong("balance");
         }
 
         BigDecimal trx = BigDecimal.valueOf(sun)
                 .divide(new BigDecimal("1000000"), 6, RoundingMode.DOWN);
-        return "TRON: " + address + "\nموجودی: " + trx.toPlainString() + " TRX";
+        return "TRON: " + address + "\\nموجودی: " + trx.toPlainString() + " TRX";
     }
 
-    private static JSONObject getJson(String url) throws Exception {
+    private static JSONObject getJsonOnce(String url) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         try {
             connection.setConnectTimeout(15000);
@@ -198,6 +233,41 @@ public class AddressScanner {
         } finally {
             connection.disconnect();
         }
+    }
+
+    private static <T> T retry(Request<T> request) throws Exception {
+        Exception lastError = null;
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+                return request.run();
+            } catch (Exception e) {
+                lastError = e;
+                if (!isRetryable(e) || attempt == MAX_ATTEMPTS) break;
+                try {
+                    Thread.sleep(500L * attempt);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new Exception("بررسی به درخواست توقف واکنش نشان داد", interrupted);
+                }
+            }
+        }
+        throw lastError == null ? new Exception("خطای نامشخص شبکه") : lastError;
+    }
+
+    private static boolean isRetryable(Exception error) {
+        String message = error.getMessage();
+        if (message == null) return true;
+        String lower = message.toLowerCase(java.util.Locale.ROOT);
+        if (lower.contains("http 4") && !lower.contains("http 429")) return false;
+        return lower.contains("http 429")
+                || lower.contains("http 5")
+                || lower.contains("timeout")
+                || lower.contains("timed out")
+                || lower.contains("connection")
+                || lower.contains("reset")
+                || lower.contains("temporarily")
+                || lower.contains("failed to connect")
+                || lower.contains("unexpected end");
     }
 
     private static String readResponse(HttpURLConnection connection) throws Exception {
