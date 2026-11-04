@@ -177,17 +177,28 @@ public final class AutoWalletScanner {
     }
 
     private static boolean hasPositiveBalance(String line) {
-        int marker = line.indexOf("موجودی: ");
-        if (marker < 0) return false;
-        int start = marker + "موجودی: ".length();
-        int end = start;
-        while (end < line.length() && (Character.isDigit(line.charAt(end)) || line.charAt(end) == '.')) end++;
-        if (end == start) return false;
-        try {
-            return new BigDecimal(line.substring(start, end)).compareTo(BigDecimal.ZERO) > 0;
-        } catch (NumberFormatException ignored) {
-            return false;
+        // BTC uses a separate confirmed-balance label; include it in positive-result detection.
+        String[] markers = {"موجودی: ", "موجودی تأییدشده: ", "موجودی در انتظار: "};
+        for (String marker : markers) {
+            int from = 0;
+            while (true) {
+                int markerAt = line.indexOf(marker, from);
+                if (markerAt < 0) break;
+                int start = markerAt + marker.length();
+                int end = start;
+                while (end < line.length()
+                        && (Character.isDigit(line.charAt(end)) || line.charAt(end) == '.')) end++;
+                if (end > start) {
+                    try {
+                        if (new BigDecimal(line.substring(start, end)).compareTo(BigDecimal.ZERO) > 0) {
+                            return true;
+                        }
+                    } catch (NumberFormatException ignored) { }
+                }
+                from = start;
+            }
         }
+        return false;
     }
 
     private static boolean hasActivity(String line) {
