@@ -11,9 +11,6 @@ import android.widget.TextView;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
-import org.web3j.crypto.MnemonicUtils;
-
-import java.security.SecureRandom;
 import java.util.List;
 import java.util.Locale;
 
@@ -21,13 +18,12 @@ public class MainActivity extends AppCompatActivity {
 
     private EditText inputText;
     private TextView outputText, statusText, speedText;
-    private Button startBtn, stopBtn, testBtn;
+    private Button startBtn, stopBtn;
     private ScrollView outputScroll;
     private MnemonicRecovery engine;
     private long t0;
     private volatile boolean scanCancelled = false;
     private volatile boolean scanning = false;
-    private String generatedTestPhrase = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,7 +36,6 @@ public class MainActivity extends AppCompatActivity {
         speedText = findViewById(R.id.speedText);
         startBtn = findViewById(R.id.startBtn);
         stopBtn = findViewById(R.id.stopBtn);
-        testBtn = findViewById(R.id.testBtn);
         outputScroll = findViewById(R.id.outputScroll);
 
         stopBtn.setEnabled(false);
@@ -50,19 +45,17 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             statusText.setText("خطا در بارگذاری فهرست BIP39: " + e.getMessage());
             startBtn.setEnabled(false);
-            testBtn.setEnabled(false);
             return;
         }
 
         startBtn.setOnClickListener(v -> onStartClicked());
         stopBtn.setOnClickListener(v -> onStopClicked());
-        testBtn.setOnClickListener(v -> generateTestPhrase());
     }
 
     private void onStartClicked() {
         String phrase = normalize(inputText.getText().toString());
         if (phrase.isEmpty()) {
-            statusText.setText("عبارت بازیابی را وارد کنید؛ یا عبارت آزمایشی بسازید.");
+            statusText.setText("عبارت بازیابی کامل و متعلق به خودتان را وارد کنید.");
             return;
         }
 
@@ -73,10 +66,6 @@ public class MainActivity extends AppCompatActivity {
         if (missing == 0) {
             if (!SafeMnemonicRecovery.isValidCompletePhrase(this, phrase)) {
                 statusText.setText("عبارت کامل نیست یا checksum استاندارد BIP39 را ندارد.");
-                return;
-            }
-            if (phrase.equals(generatedTestPhrase)) {
-                statusText.setText("این عبارت فقط برای تست آفلاین ساخته شده؛ بررسی شبکه برای آن اجرا نمی‌شود.");
                 return;
             }
             new AlertDialog.Builder(this)
@@ -97,7 +86,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void beginRecovery(String phrase) {
         startBtn.setEnabled(false);
-        testBtn.setEnabled(false);
         stopBtn.setEnabled(true);
         outputText.setText("");
         statusText.setText("در حال یافتن کلمه سازگار با checksum...");
@@ -132,7 +120,6 @@ public class MainActivity extends AppCompatActivity {
                     statusText.setText("بازیابی پایان یافت — " + found.size() + " گزینه");
                     speedText.setText(" ");
                     startBtn.setEnabled(true);
-                    testBtn.setEnabled(true);
                     stopBtn.setEnabled(false);
                     outputScroll.post(() -> outputScroll.fullScroll(View.FOCUS_DOWN));
                 });
@@ -144,7 +131,6 @@ public class MainActivity extends AppCompatActivity {
                     statusText.setText("خطا در بازیابی");
                     outputText.setText(message);
                     startBtn.setEnabled(true);
-                    testBtn.setEnabled(true);
                     stopBtn.setEnabled(false);
                 });
             }
@@ -155,7 +141,6 @@ public class MainActivity extends AppCompatActivity {
         scanCancelled = false;
         scanning = true;
         startBtn.setEnabled(false);
-        testBtn.setEnabled(false);
         stopBtn.setEnabled(true);
         outputText.setText("بررسی آدرس‌های مشتق‌شده شروع شد...\n");
         statusText.setText("در حال بررسی BTC، ETH و TRON...");
@@ -201,21 +186,6 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
-    private void generateTestPhrase() {
-        try {
-            byte[] entropy = new byte[16];
-            new SecureRandom().nextBytes(entropy);
-            generatedTestPhrase = MnemonicUtils.generateMnemonic(entropy);
-            inputText.setText(generatedTestPhrase);
-            outputText.setText("عبارت آزمایشی معتبر BIP39 ساخته شد. این عبارت فقط برای آزمایش آفلاین رابط و اعتبارسنجی است؛ آن را برای نگهداری دارایی استفاده نکنید. بررسی موجودی شبکه برای عبارت آزمایشی غیرفعال است.");
-            statusText.setText("عبارت آزمایشی ۱۲ کلمه‌ای آماده است.");
-            speedText.setText(" ");
-            java.util.Arrays.fill(entropy, (byte) 0);
-        } catch (Exception e) {
-            statusText.setText("ساخت عبارت آزمایشی ناموفق بود: " + e.getMessage());
-        }
-    }
-
     private void onStopClicked() {
         scanCancelled = true;
         if (engine != null) engine.stop();
@@ -231,7 +201,6 @@ public class MainActivity extends AppCompatActivity {
     private void finishOperation() {
         scanning = false;
         startBtn.setEnabled(true);
-        testBtn.setEnabled(true);
         stopBtn.setEnabled(false);
     }
 
