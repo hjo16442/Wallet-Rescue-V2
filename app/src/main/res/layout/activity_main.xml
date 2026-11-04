@@ -13,7 +13,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="عبارت BIP39 (کلمات گمشده را با ? بنویسید):"
+            android:text="عبارت بازیابی BIP39 (کلمه گمشده را با ? مشخص کنید):"
             android:textStyle="bold" />
 
         <EditText
@@ -26,14 +26,6 @@
             android:inputType="textMultiLine|textNoSuggestions"
             android:layout_marginTop="4dp" />
 
-        <CheckBox
-            android:id="@+id/forceBox"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="جستجوی کامل ۱۲/۲۴ (هشدار: هرگز تمام نمی‌شود)"
-            android:textColor="#B00000"
-            android:layout_marginTop="8dp" />
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -45,17 +37,25 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="▶ شروع"
+                android:text="▶ شروع / بازیابی / بررسی"
                 android:layout_marginEnd="4dp" />
 
             <Button
-                android:id="@+id/stopBtn"
+                android:id="@+id/testBtn"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="■ توقف"
+                android:text="ساخت عبارت آزمایشی"
                 android:layout_marginStart="4dp" />
         </LinearLayout>
+
+        <Button
+            android:id="@+id/stopBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="■ توقف"
+            android:enabled="false"
+            android:layout_marginTop="4dp" />
 
         <TextView
             android:id="@+id/statusText"
