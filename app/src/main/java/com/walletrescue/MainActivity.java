@@ -4,7 +4,6 @@ import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.View;
 import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -12,6 +11,9 @@ import android.widget.TextView;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import org.web3j.crypto.MnemonicUtils;
+
+import java.security.SecureRandom;
 import java.util.List;
 import java.util.Locale;
 
@@ -19,79 +21,96 @@ public class MainActivity extends AppCompatActivity {
 
     private EditText inputText;
     private TextView outputText, statusText, speedText;
-    private CheckBox forceBox;
-    private Button startBtn, stopBtn;
+    private Button startBtn, stopBtn, testBtn;
     private ScrollView outputScroll;
     private MnemonicRecovery engine;
     private long t0;
+    private volatile boolean scanCancelled = false;
+    private volatile boolean scanning = false;
+    private String generatedTestPhrase = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        inputText    = findViewById(R.id.inputText);
-        outputText   = findViewById(R.id.outputText);
-        statusText   = findViewById(R.id.statusText);
-        speedText    = findViewById(R.id.speedText);
-        forceBox     = findViewById(R.id.forceBox);
-        startBtn     = findViewById(R.id.startBtn);
-        stopBtn      = findViewById(R.id.stopBtn);
+        inputText = findViewById(R.id.inputText);
+        outputText = findViewById(R.id.outputText);
+        statusText = findViewById(R.id.statusText);
+        speedText = findViewById(R.id.speedText);
+        startBtn = findViewById(R.id.startBtn);
+        stopBtn = findViewById(R.id.stopBtn);
+        testBtn = findViewById(R.id.testBtn);
         outputScroll = findViewById(R.id.outputScroll);
 
         stopBtn.setEnabled(false);
-        inputText.setText("? ? ? ? ? ? ? ? ? ? ? ?");
 
         try {
             engine = new MnemonicRecovery(this);
         } catch (Exception e) {
-            statusText.setText("خطا در بارگذاری دیکشنری: " + e.getMessage());
+            statusText.setText("خطا در بارگذاری فهرست BIP39: " + e.getMessage());
             startBtn.setEnabled(false);
+            testBtn.setEnabled(false);
             return;
         }
 
         startBtn.setOnClickListener(v -> onStartClicked());
         stopBtn.setOnClickListener(v -> onStopClicked());
+        testBtn.setOnClickListener(v -> generateTestPhrase());
     }
 
     private void onStartClicked() {
-        String phrase = inputText.getText().toString();
-        int wordCount = phrase.trim().isEmpty() ? 12 : phrase.trim().split("\\s+").length;
-        int missingCount = 0;
-        for (String w : phrase.trim().split("\\s+")) if (w.equals("?")) missingCount++;
-        if (phrase.trim().isEmpty()) missingCount = 12;
+        String phrase = normalize(inputText.getText().toString());
+        if (phrase.isEmpty()) {
+            statusText.setText("عبارت بازیابی را وارد کنید؛ یا عبارت آزمایشی بسازید.");
+            return;
+        }
 
-        if (missingCount == wordCount && wordCount > 0) {
+        String[] words = phrase.split(" ");
+        int missing = 0;
+        for (String word : words) if ("?".equals(word)) missing++;
+
+        if (missing == 0) {
+            if (!SafeMnemonicRecovery.isValidCompletePhrase(this, phrase)) {
+                statusText.setText("عبارت کامل نیست یا checksum استاندارد BIP39 را ندارد.");
+                return;
+            }
+            if (phrase.equals(generatedTestPhrase)) {
+                statusText.setText("این عبارت فقط برای تست آفلاین ساخته شده؛ بررسی شبکه برای آن اجرا نمی‌شود.");
+                return;
+            }
             new AlertDialog.Builder(this)
-                    .setTitle("هشدار جدی")
-                    .setMessage("همهٔ " + wordCount + " کلمه گم شده‌اند.\n\n" +
-                            "این عملیات از نظر ریاضی هرگز تمام نمی‌شود " +
-                            "(2^" + (wordCount == 12 ? 128 : 256) + " حالت).\n\n" +
-                            "فقط برای تست اجرا کنید. مطمئن هستید؟")
-                    .setPositiveButton("بله، اجرا کن", (d, w) -> beginSearch(phrase, true))
+                    .setTitle("تأیید بررسی کیف‌پول خودتان")
+                    .setMessage("آدرس‌های مشتق‌شده از عبارت واردشده در شبکه‌های عمومی BTC، ETH و TRON بررسی می‌شوند. عبارت بازیابی و کلید خصوصی ارسال نمی‌شوند. ادامه می‌دهید؟")
+                    .setPositiveButton("شروع بررسی", (d, w) -> beginWalletScan(phrase))
                     .setNegativeButton("لغو", null)
                     .show();
             return;
         }
 
-        beginSearch(phrase, forceBox.isChecked());
+        if (missing != 1) {
+            statusText.setText("برای بازیابی، فقط یک کلمه را با ? مشخص کنید. جستجوی چند کلمه یا ۱۲ کلمه نامشخص عملی نیست.");
+            return;
+        }
+        beginRecovery(phrase);
     }
 
-    private void beginSearch(String phrase, boolean force) {
+    private void beginRecovery(String phrase) {
         startBtn.setEnabled(false);
+        testBtn.setEnabled(false);
         stopBtn.setEnabled(true);
         outputText.setText("");
-        statusText.setText("در حال شروع...");
+        statusText.setText("در حال یافتن کلمه سازگار با checksum...");
         speedText.setText(" ");
         t0 = SystemClock.elapsedRealtime();
 
-        engine.findAsync(phrase, force, new MnemonicRecovery.Callback() {
+        engine.findAsync(phrase, false, new MnemonicRecovery.Callback() {
             @Override
             public void onProgress(long tested, long found) {
                 long elapsed = SystemClock.elapsedRealtime() - t0;
                 long speed = elapsed > 0 ? tested * 1000 / elapsed : 0;
                 runOnUiThread(() -> {
-                    statusText.setText("تست: " + fmt(tested) + " | یافته: " + found);
+                    statusText.setText("بررسی کلمات: " + fmt(tested) + " از ۲۰۴۸ | گزینه‌های معتبر: " + found);
                     speedText.setText("سرعت: " + fmt(speed) + " تست/ثانیه");
                 });
             }
@@ -100,43 +119,127 @@ public class MainActivity extends AppCompatActivity {
             public void onResult(List<String> found) {
                 runOnUiThread(() -> {
                     if (found.isEmpty()) {
-                        outputText.setText("نتیجه‌ای یافت نشد.\n\nتست‌شده: " + fmt(engine.getTested()));
+                        outputText.setText("کلمه‌ای با checksum سازگار پیدا نشد.");
                     } else {
                         StringBuilder sb = new StringBuilder();
+                        sb.append("عبارت‌های سازگار با BIP39 (هنوز موجودی بررسی نشده):\n\n");
                         for (int i = 0; i < found.size(); i++) {
                             sb.append(i + 1).append(". ").append(found.get(i)).append("\n\n");
                         }
+                        sb.append("برای بررسی، فقط عبارت متعلق به خودتان را در کادر بالا قرار دهید و دوباره شروع را بزنید.");
                         outputText.setText(sb.toString());
-                        outputScroll.post(() -> outputScroll.fullScroll(View.FOCUS_UP));
                     }
-                    statusText.setText("تمام شد — " + found.size() + " نتیجه");
+                    statusText.setText("بازیابی پایان یافت — " + found.size() + " گزینه");
                     speedText.setText(" ");
                     startBtn.setEnabled(true);
+                    testBtn.setEnabled(true);
                     stopBtn.setEnabled(false);
+                    outputScroll.post(() -> outputScroll.fullScroll(View.FOCUS_DOWN));
                 });
             }
 
             @Override
             public void onError(String message) {
                 runOnUiThread(() -> {
-                    statusText.setText("خطا");
-                    outputText.setText("خطا: " + message);
+                    statusText.setText("خطا در بازیابی");
+                    outputText.setText(message);
                     startBtn.setEnabled(true);
+                    testBtn.setEnabled(true);
                     stopBtn.setEnabled(false);
                 });
             }
         });
     }
 
+    private void beginWalletScan(String phrase) {
+        scanCancelled = false;
+        scanning = true;
+        startBtn.setEnabled(false);
+        testBtn.setEnabled(false);
+        stopBtn.setEnabled(true);
+        outputText.setText("بررسی آدرس‌های مشتق‌شده شروع شد...\n");
+        statusText.setText("در حال بررسی BTC، ETH و TRON...");
+        speedText.setText("۰ از ۸۰ آدرس");
+        new Thread(() -> {
+            try {
+                String report = AutoWalletScanner.scan(
+                        getApplicationContext(),
+                        phrase,
+                        20,
+                        (done, total) -> runOnUiThread(() -> {
+                            if (!scanCancelled) {
+                                statusText.setText("در حال بررسی شبکه‌ها...");
+                                speedText.setText(fmt(done) + " از " + fmt(total) + " آدرس");
+                            }
+                        }),
+                        () -> scanCancelled,
+                        line -> runOnUiThread(() -> {
+                            if (!scanCancelled) {
+                                outputText.append("\n✓ نتیجه غیرصفر: " + line + "\n");
+                                outputScroll.post(() -> outputScroll.fullScroll(View.FOCUS_DOWN));
+                            }
+                        })
+                );
+                runOnUiThread(() -> {
+                    outputText.setText(report);
+                    statusText.setText("بررسی تمام شد.");
+                    speedText.setText(" ");
+                    finishOperation();
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    if (scanCancelled) {
+                        statusText.setText("بررسی متوقف شد.");
+                    } else {
+                        statusText.setText("خطا در بررسی شبکه");
+                        outputText.append("\n" + (e.getMessage() == null ? e.toString() : e.getMessage()));
+                    }
+                    speedText.setText(" ");
+                    finishOperation();
+                });
+            }
+        }).start();
+    }
+
+    private void generateTestPhrase() {
+        try {
+            byte[] entropy = new byte[16];
+            new SecureRandom().nextBytes(entropy);
+            generatedTestPhrase = MnemonicUtils.generateMnemonic(entropy);
+            inputText.setText(generatedTestPhrase);
+            outputText.setText("عبارت آزمایشی معتبر BIP39 ساخته شد. این عبارت فقط برای آزمایش آفلاین رابط و اعتبارسنجی است؛ آن را برای نگهداری دارایی استفاده نکنید. بررسی موجودی شبکه برای عبارت آزمایشی غیرفعال است.");
+            statusText.setText("عبارت آزمایشی ۱۲ کلمه‌ای آماده است.");
+            speedText.setText(" ");
+            java.util.Arrays.fill(entropy, (byte) 0);
+        } catch (Exception e) {
+            statusText.setText("ساخت عبارت آزمایشی ناموفق بود: " + e.getMessage());
+        }
+    }
+
     private void onStopClicked() {
-        engine.stop();
-        statusText.setText("متوقف شد — تست‌شده: " + fmt(engine.getTested()));
-        speedText.setText(" ");
+        scanCancelled = true;
+        if (engine != null) engine.stop();
+        if (!scanning) {
+            statusText.setText("عملیات متوقف شد.");
+            speedText.setText(" ");
+            finishOperation();
+        } else {
+            statusText.setText("درخواست توقف بررسی شبکه ارسال شد...");
+        }
+    }
+
+    private void finishOperation() {
+        scanning = false;
         startBtn.setEnabled(true);
+        testBtn.setEnabled(true);
         stopBtn.setEnabled(false);
     }
 
-    private static String fmt(long v) {
-        return String.format(Locale.US, "%,d", v);
+    private static String normalize(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+    }
+
+    private static String fmt(long value) {
+        return String.format(Locale.US, "%,d", value);
     }
 }
