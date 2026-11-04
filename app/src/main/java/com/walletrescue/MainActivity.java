@@ -659,7 +659,7 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
                     return;
                 }
 
-                final String[] lines = raw.split("\\r?\\n");
+                final String[] lines = raw.split("\\r?\n");
                 final int network = networkSpinner.getSelectedItemPosition();
 
                 result.setText("در حال بررسی " + lines.length + " آدرس...");
@@ -749,7 +749,7 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
                                     () -> scanCancelled,
                                     line -> {
                                         synchronized (MainActivity.this) {
-                                            autoScanHits = "🎉 موجودی پیدا شد!\\n" + line + "\\n\\n" + autoScanHits;
+                                            autoScanHits = "🎉 موجودی پیدا شد!\n" + line + "\n\n" + autoScanHits;
                                         }
                                         runOnUiThread(() -> renderAutoScanStatus());
                                     });
@@ -774,7 +774,7 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
     private void renderAutoScanStatus() {
         String hits = autoScanHits;
         String status = autoScanProgress;
-        result.setText((hits == null || hits.isEmpty() ? "" : hits + "\\n--------------------\\n\\n")
+        result.setText((hits == null || hits.isEmpty() ? "" : hits + "\n--------------------\n\n")
                 + (status == null ? "" : status));
     }
 
