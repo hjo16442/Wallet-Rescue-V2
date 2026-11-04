@@ -1,6 +1,7 @@
 package com.walletrescue;
 
 import android.os.Bundle;
+import android.content.SharedPreferences;
 import android.os.SystemClock;
 import android.view.View;
 import android.widget.Button;
@@ -20,7 +21,7 @@ import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
-    private EditText inputText;
+    private EditText inputText, tronApiKeyInput;
     private TextView outputText, statusText, speedText;
     private Button startBtn, stopBtn, generate12Btn, generate24Btn;
     private ScrollView outputScroll;
@@ -35,6 +36,9 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         inputText = findViewById(R.id.inputText);
+        tronApiKeyInput = findViewById(R.id.tronApiKeyInput);
+        tronApiKeyInput.setText(getSharedPreferences("wallet_rescue_settings", MODE_PRIVATE).getString("trongrid_api_key", ""));
+        findViewById(R.id.saveTronApiKeyBtn).setOnClickListener(v -> saveTronApiKey());
         outputText = findViewById(R.id.outputText);
         statusText = findViewById(R.id.statusText);
         speedText = findViewById(R.id.speedText);
@@ -58,6 +62,15 @@ public class MainActivity extends AppCompatActivity {
         stopBtn.setOnClickListener(v -> onStopClicked());
         generate12Btn.setOnClickListener(v -> generateMnemonic(16));
         generate24Btn.setOnClickListener(v -> generateMnemonic(32));
+    }
+
+    private void saveTronApiKey() {
+        String key = tronApiKeyInput.getText().toString().trim();
+        getSharedPreferences("wallet_rescue_settings", MODE_PRIVATE).edit()
+                .putString("trongrid_api_key", key).apply();
+        statusText.setText(key.isEmpty()
+                ? "کلید TronGrid پاک شد؛ بررسی TRON ممکن است با محدودیت 403 روبه‌رو شود."
+                : "کلید TronGrid فقط روی همین گوشی ذخیره شد.");
     }
 
     // Generate a wallet phrase locally using cryptographically secure entropy.
