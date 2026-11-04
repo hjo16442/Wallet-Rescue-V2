@@ -101,7 +101,13 @@
             android:layout_weight="1"
             android:layout_marginTop="4dp"
             android:background="#F5F5F5"
-            android:padding="8dp">
+            android:padding="8dp"
+            android:scrollbars="vertical"
+            android:fadeScrollbars="false"
+            android:scrollbarFadeDuration="0"
+            android:scrollbarSize="8dp"
+            android:scrollbarStyle="insideInset"
+            android:scrollbarAlwaysDrawVerticalTrack="true">
 
             <TextView
                 android:id="@+id/outputText"
