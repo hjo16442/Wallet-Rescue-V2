@@ -27,6 +27,8 @@ public class MainActivity extends Activity {
     Button checkButton, historyButton, scanButton, recoveryButton, bulkScanButton, generateButton;
     Button autoScanButton, cancelScanButton;
     volatile boolean scanCancelled = false;
+    volatile String autoScanHits = "";
+    volatile String autoScanProgress = "";
 
     ExecutorService executor = Executors.newSingleThreadExecutor();
     static final int PICK_WALLET_FILE = 1001;
@@ -104,7 +106,8 @@ public class MainActivity extends Activity {
         layout.addView(cancelScanButton);
         cancelScanButton.setOnClickListener(v -> {
             scanCancelled = true;
-            result.setText("درخواست توقف ارسال شد؛ بعد از درخواست جاری متوقف می‌شود.");
+            autoScanProgress = "درخواست توقف ارسال شد؛ بعد از درخواست جاری متوقف می‌شود.";
+            renderAutoScanStatus();
         });
 
 
@@ -732,14 +735,24 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
                         scanCancelled = false;
                         cancelScanButton.setEnabled(true);
                         autoScanButton.setEnabled(false);
-                        result.setText("اسکن شروع شد...");
+                        autoScanHits = "";
+                        autoScanProgress = "اسکن شروع شد؛ آدرس‌های دارای موجودی به محض پیدا شدن نمایش داده می‌شوند.";
+                        renderAutoScanStatus();
                         executor.execute(() -> {
                             String response;
                             try {
                                 response = AutoWalletScanner.scan(this, phrase, count,
-                                    (done, total) -> runOnUiThread(() ->
-                                        result.setText("در حال اسکن " + done + " از " + total)),
-                                    () -> scanCancelled);
+                                    (done, total) -> {
+                                        autoScanProgress = "پیشرفت اسکن: " + done + " از " + total;
+                                        runOnUiThread(() -> renderAutoScanStatus());
+                                    },
+                                    () -> scanCancelled,
+                                    line -> {
+                                        synchronized (MainActivity.this) {
+                                            autoScanHits = "🎉 موجودی پیدا شد!\\n" + line + "\\n\\n" + autoScanHits;
+                                        }
+                                        runOnUiThread(() -> renderAutoScanStatus());
+                                    });
                             } catch (Exception | LinkageError e) {
                                 response = "اسکن متوقف شد: " + e.getClass().getSimpleName();
                             }
@@ -756,6 +769,13 @@ generateButton.setOnClickListener(v -> showGeneratePhraseDialog());
             })
             .setNegativeButton("انصراف", null)
             .show();
+    }
+
+    private void renderAutoScanStatus() {
+        String hits = autoScanHits;
+        String status = autoScanProgress;
+        result.setText((hits == null || hits.isEmpty() ? "" : hits + "\\n--------------------\\n\\n")
+                + (status == null ? "" : status));
     }
 
     private void showRecoveryDialog() {
