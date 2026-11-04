@@ -84,7 +84,7 @@ public final class AutoWalletScanner {
 
             ExecutorService pool = Executors.newFixedThreadPool(8);
             try {
-                report.append("BITCOIN — BIP44 (Legacy)\\n");
+                report.append("BITCOIN — BIP44 (Legacy)\n");
                 List<String> legacyAddresses = new ArrayList<>();
                 for (int i = 0; i < addressCount; i++) {
                     DeterministicKey key = deriveBitcoin(btcMaster, 44, i);
@@ -93,7 +93,7 @@ public final class AutoWalletScanner {
                 appendParallelResults(report, legacyAddresses, AutoWalletScanner::safeBitcoin,
                         pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 4);
 
-                report.append("\\nBITCOIN — BIP84 (Native SegWit)\\n");
+                report.append("\nBITCOIN — BIP84 (Native SegWit)\n");
                 List<String> segwitAddresses = new ArrayList<>();
                 for (int i = 0; i < addressCount; i++) {
                     DeterministicKey key = deriveBitcoin(btcMaster, 84, i);
@@ -103,7 +103,7 @@ public final class AutoWalletScanner {
                         pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 4);
 
                 Bip32ECKeyPair master = Bip32ECKeyPair.generateKeyPair(seed);
-                report.append("\\nETHEREUM — m/44'/60'/0'/0/i\\n");
+                report.append("\nETHEREUM — m/44'/60'/0'/0/i\n");
                 List<String> ethAddresses = new ArrayList<>();
                 for (int i = 0; i < addressCount; i++) {
                     int[] path = {harden(44), harden(60), harden(0), 0, i};
@@ -113,7 +113,7 @@ public final class AutoWalletScanner {
                 appendParallelResults(report, ethAddresses, AutoWalletScanner::checkEthereum,
                         pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 4);
 
-                report.append("\\nTRON — m/44'/195'/0'/0/i\\n");
+                report.append("\nTRON — m/44'/195'/0'/0/i\n");
                 List<String> tronAddresses = new ArrayList<>();
                 for (int i = 0; i < addressCount; i++) {
                     int[] path = {harden(44), harden(195), harden(0), 0, i};
@@ -153,11 +153,11 @@ public final class AutoWalletScanner {
                 try {
                     line = checker.check(address);
                 } catch (Exception e) {
-                    line = address + "\\nخطا در بررسی: " + e.getMessage();
+                    line = address + "\nخطا در بررسی: " + e.getMessage();
                 }
                 if (hasPositiveBalance(line)) {
                     found.incrementAndGet();
-                    synchronized (foundReport) { foundReport.append(line).append("\\n\\n"); }
+                    synchronized (foundReport) { foundReport.append(line).append("\n\n"); }
                     foundCallback.accept(line);
                 }
                 int done = checked.incrementAndGet();
@@ -167,7 +167,7 @@ public final class AutoWalletScanner {
         }
         for (Future<String> future : futures) {
             if (cancelled.getAsBoolean()) throw new InterruptedException("Cancelled");
-            report.append(future.get()).append("\\n");
+            report.append(future.get()).append("\n");
         }
     }
 
