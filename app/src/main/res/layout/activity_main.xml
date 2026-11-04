@@ -26,28 +26,19 @@
             android:inputType="textMultiLine|textNoSuggestions"
             android:layout_marginTop="4dp" />
 
-        <LinearLayout
+        <Button
+            android:id="@+id/startBtn"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginTop="8dp">
+            android:layout_marginTop="8dp"
+            android:text="▶ شروع بازیابی و بررسی شبکه اصلی" />
 
-            <Button
-                android:id="@+id/startBtn"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="▶ شروع / بازیابی / بررسی"
-                android:layout_marginEnd="4dp" />
-
-            <Button
-                android:id="@+id/testBtn"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="ساخت عبارت آزمایشی"
-                android:layout_marginStart="4dp" />
-        </LinearLayout>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="بررسی شبکه اصلی BTC، ETH و TRON؛ فقط عبارت بازیابی متعلق به خودتان را وارد کنید."
+            android:textSize="12sp" />
 
         <Button
             android:id="@+id/stopBtn"
@@ -61,7 +52,7 @@
             android:id="@+id/statusText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="آماده"
+            android:text="آماده — شبکه اصلی BTC / ETH / TRON"
             android:paddingTop="8dp"
             android:textStyle="bold" />
 
