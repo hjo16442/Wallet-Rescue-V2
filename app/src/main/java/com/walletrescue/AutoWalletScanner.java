@@ -76,7 +76,7 @@ public final class AutoWalletScanner {
 
         try {
             report.append("MAINNET RECOVERY CHECK — DERIVED ADDRESSES\n");
-            report.append("۵ آدرس اول در مسیرهای مشخص‌شده بررسی می‌شوند.\n");
+            report.append("۱۰۰۰ آدرس اول در هر مسیر مشخص‌شده بررسی می‌شوند.\n");
             report.append("عبارت و کلید خصوصی به اینترنت ارسال نمی‌شوند.\n\n");
 
             NetworkParameters btcParams = MainNetParams.get();
