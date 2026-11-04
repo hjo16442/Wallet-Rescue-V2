@@ -220,24 +220,10 @@ public final class AutoWalletScanner {
                     .divide(new BigDecimal("100000000"));
             long allTx = confirmedTx + pendingTx;
             String activity = allTx > 0 ? "فعال" : "بدون سابقه تراکنش";
-            String latest = "";
-            if (confirmedTx > 0) {
-                try {
-                    JSONArray txs = getJson("https://mempool.space/api/address/" + address + "/txs")
-                            .optJSONArray("items");
-                    if (txs != null && txs.length() > 0) {
-                        JSONObject status = txs.getJSONObject(0).optJSONObject("status");
-                        long blockTime = status == null ? 0 : status.optLong("block_time", 0);
-                        if (blockTime > 0) latest = " | آخرین فعالیت: " + new java.text.SimpleDateFormat(
-                                "yyyy-MM-dd HH:mm", java.util.Locale.US)
-                                .format(new java.util.Date(blockTime * 1000L)) + " UTC";
-                    }
-                } catch (Exception ignored) { }
-            }
             return address + "\nموجودی: " + balance.toPlainString()
                     + " BTC | وضعیت فعالیت: " + activity
                     + " | تراکنش تأییدشده: " + confirmedTx
-                    + " | در انتظار: " + pendingTx + latest;
+                    + " | در انتظار: " + pendingTx;
         } catch (Exception e) {
             return address + "\nخطا در بررسی BTC: " + e.getMessage();
         }
