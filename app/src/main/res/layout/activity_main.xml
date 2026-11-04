@@ -13,8 +13,29 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="عبارت بازیابی BIP39 (کلمه گمشده را با ? مشخص کنید):"
+            android:text="تولید یا وارد کردن عبارت بازیابی BIP39:"
             android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/generate12Btn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="تولید عبارت جدید ۱۲ کلمه‌ای (آفلاین)" />
+
+        <Button
+            android:id="@+id/generate24Btn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="تولید عبارت جدید ۲۴ کلمه‌ای (آفلاین)" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="عبارت فقط روی گوشی ساخته می‌شود. آن را محرمانه و آفلاین نگهداری کنید."
+            android:textSize="12sp" />
 
         <EditText
             android:id="@+id/inputText"
@@ -24,20 +45,21 @@
             android:gravity="top|start"
             android:fontFamily="monospace"
             android:inputType="textMultiLine|textNoSuggestions"
-            android:layout_marginTop="4dp" />
+            android:layout_marginTop="8dp"
+            android:hint="عبارت خودتان را وارد کنید؛ برای یک کلمه گمشده از ? استفاده کنید" />
 
         <Button
             android:id="@+id/startBtn"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="▶ شروع بازیابی و بررسی شبکه اصلی" />
+            android:text="▶ بررسی عبارت و آدرس‌ها در شبکه اصلی" />
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:text="بررسی شبکه اصلی BTC، ETH و TRON؛ فقط عبارت بازیابی متعلق به خودتان را وارد کنید."
+            android:text="بررسی آنلاین شبکه اصلی BTC، ETH و TRON؛ فقط عبارت متعلق به خودتان را وارد کنید. عبارت و کلید خصوصی ارسال نمی‌شوند."
             android:textSize="12sp" />
 
         <Button
