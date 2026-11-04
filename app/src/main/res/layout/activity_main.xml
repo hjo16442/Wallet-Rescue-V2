@@ -49,6 +49,29 @@
             android:layout_marginTop="8dp"
             android:hint="عبارت خودتان را وارد کنید؛ برای یک کلمه گمشده از ? استفاده کنید" />
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="کلید API شبکه TRON (از پنل رسمی TronGrid؛ اختیاری):"
+            android:textStyle="bold"
+            android:textSize="12sp" />
+
+        <EditText
+            android:id="@+id/tronApiKeyInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:singleLine="true"
+            android:inputType="textPassword|textNoSuggestions"
+            android:hint="TRON-PRO-API-KEY" />
+
+        <Button
+            android:id="@+id/saveTronApiKeyBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ذخیره کلید TRON روی گوشی"
+            android:layout_marginTop="2dp" />
+
         <Button
             android:id="@+id/startBtn"
             android:layout_width="match_parent"
