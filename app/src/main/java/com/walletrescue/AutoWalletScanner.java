@@ -212,15 +212,25 @@ public final class AutoWalletScanner {
             JSONObject json = getJson("https://mempool.space/api/address/" + address);
             JSONObject stats = json.optJSONObject("chain_stats");
             JSONObject mempool = json.optJSONObject("mempool_stats");
-            long received = stats == null ? 0 : stats.optLong("funded_txo_sum", 0);
-            long spent = stats == null ? 0 : stats.optLong("spent_txo_sum", 0);
-            long confirmedTx = stats == null ? 0 : stats.optLong("tx_count", 0);
-            long pendingTx = mempool == null ? 0 : mempool.optLong("tx_count", 0);
-            BigDecimal balance = BigDecimal.valueOf(received - spent)
-                    .divide(new BigDecimal("100000000"));
+            if (stats == null || mempool == null) {
+                throw new Exception("پاسخ ناقص از سرویس بیت‌کوین؛ موجودی قابل تأیید نیست");
+            }
+            long received = stats.optLong("funded_txo_sum", 0);
+            long spent = stats.optLong("spent_txo_sum", 0);
+            long pendingReceived = mempool.optLong("funded_txo_sum", 0);
+            long pendingSpent = mempool.optLong("spent_txo_sum", 0);
+            long confirmedTx = stats.optLong("tx_count", 0);
+            long pendingTx = mempool.optLong("tx_count", 0);
+            BigDecimal confirmed = BigDecimal.valueOf(received - spent)
+                    .divide(new BigDecimal("100000000"), 8, RoundingMode.DOWN);
+            BigDecimal pending = BigDecimal.valueOf(pendingReceived - pendingSpent)
+                    .divide(new BigDecimal("100000000"), 8, RoundingMode.DOWN);
+            BigDecimal total = confirmed.add(pending);
             long allTx = confirmedTx + pendingTx;
             String activity = allTx > 0 ? "فعال" : "بدون سابقه تراکنش";
-            return address + "\nموجودی: " + balance.toPlainString()
+            return address + "\nموجودی تأییدشده: " + confirmed.toPlainString()
+                    + " BTC | موجودی در انتظار: " + pending.toPlainString()
+                    + " BTC | مجموع: " + total.toPlainString()
                     + " BTC | وضعیت فعالیت: " + activity
                     + " | تراکنش تأییدشده: " + confirmedTx
                     + " | در انتظار: " + pendingTx;
@@ -230,6 +240,10 @@ public final class AutoWalletScanner {
     }
 
     private static String checkEthereum(String address) throws Exception {
+        return retry(() -> checkEthereumOnce(address));
+    }
+
+    private static String checkEthereumOnce(String address) throws Exception {
         HttpURLConnection connection = (HttpURLConnection)
                 new URL("https://ethereum-rpc.publicnode.com").openConnection();
         try {
@@ -336,6 +350,10 @@ public final class AutoWalletScanner {
     }
 
     private static JSONObject getJson(String url) throws Exception {
+        return retry(() -> getJsonOnce(url));
+    }
+
+    private static JSONObject getJsonOnce(String url) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         try {
             connection.setConnectTimeout(15000);
@@ -344,6 +362,43 @@ public final class AutoWalletScanner {
         } finally {
             connection.disconnect();
         }
+    }
+
+    @FunctionalInterface
+    private interface RetryableCall<T> {
+        T run() throws Exception;
+    }
+
+    private static <T> T retry(RetryableCall<T> call) throws Exception {
+        Exception last = null;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+                return call.run();
+            } catch (Exception e) {
+                last = e;
+                if (!isTemporaryError(e) || attempt == 2) throw e;
+                try {
+                    Thread.sleep(500L * (attempt + 1));
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw interrupted;
+                }
+            }
+        }
+        throw last == null ? new Exception("خطای نامشخص شبکه") : last;
+    }
+
+    private static boolean isTemporaryError(Exception e) {
+        String message = String.valueOf(e.getMessage()).toLowerCase(java.util.Locale.ROOT);
+        return message.contains("http 429")
+                || message.matches("(?s).*http 5[0-9]{2}.*")
+                || message.contains("timeout")
+                || message.contains("timed out")
+                || message.contains("connection")
+                || message.contains("reset")
+                || message.contains("temporarily")
+                || message.contains("unavailable")
+                || message.contains("network");
     }
 
     private static String readResponse(HttpURLConnection connection) throws Exception {
