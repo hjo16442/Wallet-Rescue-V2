@@ -155,7 +155,7 @@ public final class AutoWalletScanner {
                 } catch (Exception e) {
                     line = address + "\nخطا در بررسی: " + e.getMessage();
                 }
-                if (hasPositiveBalance(line)) {
+                if (hasPositiveBalance(line) || hasActivity(line)) {
                     found.incrementAndGet();
                     synchronized (foundReport) { foundReport.append(line).append("\n\n"); }
                     foundCallback.accept(line);
@@ -190,6 +190,10 @@ public final class AutoWalletScanner {
         }
     }
 
+    private static boolean hasActivity(String line) {
+        return line.contains("وضعیت فعالیت: فعال");
+    }
+
     private static int harden(int n) {
         return n | Bip32ECKeyPair.HARDENED_BIT;
     }
@@ -207,13 +211,33 @@ public final class AutoWalletScanner {
         try {
             JSONObject json = getJson("https://mempool.space/api/address/" + address);
             JSONObject stats = json.optJSONObject("chain_stats");
+            JSONObject mempool = json.optJSONObject("mempool_stats");
             long received = stats == null ? 0 : stats.optLong("funded_txo_sum", 0);
             long spent = stats == null ? 0 : stats.optLong("spent_txo_sum", 0);
-            long txCount = stats == null ? 0 : stats.optLong("tx_count", 0);
+            long confirmedTx = stats == null ? 0 : stats.optLong("tx_count", 0);
+            long pendingTx = mempool == null ? 0 : mempool.optLong("tx_count", 0);
             BigDecimal balance = BigDecimal.valueOf(received - spent)
                     .divide(new BigDecimal("100000000"));
+            long allTx = confirmedTx + pendingTx;
+            String activity = allTx > 0 ? "فعال" : "بدون سابقه تراکنش";
+            String latest = "";
+            if (confirmedTx > 0) {
+                try {
+                    JSONArray txs = getJson("https://mempool.space/api/address/" + address + "/txs")
+                            .optJSONArray("items");
+                    if (txs != null && txs.length() > 0) {
+                        JSONObject status = txs.getJSONObject(0).optJSONObject("status");
+                        long blockTime = status == null ? 0 : status.optLong("block_time", 0);
+                        if (blockTime > 0) latest = " | آخرین فعالیت: " + new java.text.SimpleDateFormat(
+                                "yyyy-MM-dd HH:mm", java.util.Locale.US)
+                                .format(new java.util.Date(blockTime * 1000L)) + " UTC";
+                    }
+                } catch (Exception ignored) { }
+            }
             return address + "\nموجودی: " + balance.toPlainString()
-                    + " BTC | تراکنش تأییدشده: " + txCount;
+                    + " BTC | وضعیت فعالیت: " + activity
+                    + " | تراکنش تأییدشده: " + confirmedTx
+                    + " | در انتظار: " + pendingTx + latest;
         } catch (Exception e) {
             return address + "\nخطا در بررسی BTC: " + e.getMessage();
         }
@@ -239,7 +263,29 @@ public final class AutoWalletScanner {
             BigInteger wei = new BigInteger(hex.substring(2), 16);
             BigDecimal eth = new BigDecimal(wei).divide(
                     new BigDecimal("1000000000000000000"), 18, RoundingMode.DOWN);
-            return address + "\nموجودی: " + eth.toPlainString() + " ETH";
+
+            String activity = "نامشخص";
+            String txCountText = "نامشخص";
+            String latest = "";
+            try {
+                JSONObject details = getJson("https://eth.blockscout.com/api/v2/addresses/" + address);
+                long txCount = details.optLong("transactions_count", -1);
+                if (txCount >= 0) {
+                    txCountText = String.valueOf(txCount);
+                    activity = txCount > 0 ? "فعال" : "بدون سابقه تراکنش";
+                    if (txCount > 0) {
+                        JSONArray txs = getJson("https://eth.blockscout.com/api/v2/addresses/"
+                                + address + "/transactions").optJSONArray("items");
+                        if (txs != null && txs.length() > 0) {
+                            String timestamp = txs.getJSONObject(0).optString("timestamp", "");
+                            if (!timestamp.isEmpty()) latest = " | آخرین فعالیت: " + timestamp;
+                        }
+                    }
+                }
+            } catch (Exception ignored) { }
+            return address + "\nموجودی: " + eth.toPlainString() + " ETH"
+                    + " | وضعیت فعالیت: " + activity
+                    + " | تعداد تراکنش‌ها: " + txCountText + latest;
         } finally {
             connection.disconnect();
         }
@@ -253,7 +299,26 @@ public final class AutoWalletScanner {
             sun = data.getJSONObject(0).optLong("balance", 0);
         }
         BigDecimal trx = BigDecimal.valueOf(sun).divide(new BigDecimal("1000000"));
-        return address + "\nموجودی: " + trx.toPlainString() + " TRX";
+        String activity = "نامشخص";
+        String latest = "";
+        try {
+            JSONObject history = getJson("https://api.trongrid.io/v1/accounts/" + address
+                    + "/transactions?only_confirmed=true&limit=1&order_by=block_timestamp,desc");
+            JSONArray txs = history.optJSONArray("data");
+            if (txs != null) {
+                if (txs.length() > 0) {
+                    activity = "فعال (دارای سابقه تراکنش)";
+                    long timestamp = txs.getJSONObject(0).optLong("block_timestamp", 0);
+                    if (timestamp > 0) latest = " | آخرین فعالیت: " + new java.text.SimpleDateFormat(
+                            "yyyy-MM-dd HH:mm", java.util.Locale.US)
+                            .format(new java.util.Date(timestamp)) + " UTC";
+                } else {
+                    activity = "بدون سابقه تراکنش تأییدشده";
+                }
+            }
+        } catch (Exception ignored) { }
+        return address + "\nموجودی: " + trx.toPlainString() + " TRX"
+                + " | وضعیت فعالیت: " + activity + latest;
     }
 
     private static String tronAddress(Bip32ECKeyPair key) throws Exception {
