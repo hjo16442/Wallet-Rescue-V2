@@ -8,10 +8,7 @@ import org.bitcoinj.crypto.ChildNumber;
 import org.bitcoinj.crypto.DeterministicKey;
 import org.bitcoinj.crypto.HDKeyDerivation;
 import org.bitcoinj.params.MainNetParams;
-import org.json.JSONArray;
 import org.json.JSONObject;
-import org.web3j.crypto.Bip32ECKeyPair;
-import org.web3j.crypto.Keys;
 import org.web3j.crypto.MnemonicUtils;
 
 import java.io.BufferedReader;
@@ -36,7 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class AutoWalletScanner {
-    private static final int DEFAULT_ADDRESS_COUNT = 100;
+    private static final int DEFAULT_ADDRESS_COUNT = 100;\n    private static final int MAX_WORKERS = 12;
     private static final char[] BASE58 =
         "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".toCharArray();
 
@@ -73,14 +70,14 @@ public final class AutoWalletScanner {
         AtomicInteger found = new AtomicInteger(0);
 
         try {
-            report.append("MAINNET RECOVERY CHECK — DERIVED ADDRESSES\n");
-            report.append("۱۰۰۰ آدرس اول در هر مسیر مشخص‌شده بررسی می‌شوند.\n");
+            report.append("BITCOIN MAINNET RECOVERY CHECK — DERIVED ADDRESSES\n");
+            report.append("تا ۱۰۰۰ آدرس اول در هر یک از دو مسیر بیت‌کوین بررسی می‌شوند.\n");
             report.append("عبارت و کلید خصوصی به اینترنت ارسال نمی‌شوند.\n\n");
 
             NetworkParameters btcParams = MainNetParams.get();
             DeterministicKey btcMaster = HDKeyDerivation.createMasterPrivateKey(seed);
 
-            ExecutorService pool = Executors.newFixedThreadPool(8);
+            ExecutorService pool = Executors.newFixedThreadPool(MAX_WORKERS);
             try {
                 report.append("BITCOIN — BIP44 (Legacy)\n");
                 List<String> legacyAddresses = new ArrayList<>();
@@ -89,7 +86,7 @@ public final class AutoWalletScanner {
                     legacyAddresses.add(LegacyAddress.fromKey(btcParams, key).toString());
                 }
                 appendParallelResults(report, legacyAddresses, AutoWalletScanner::safeBitcoin,
-                        pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 3);
+                        pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 2);
 
                 report.append("\nBITCOIN — BIP84 (Native SegWit)\n");
                 List<String> segwitAddresses = new ArrayList<>();
@@ -98,17 +95,6 @@ public final class AutoWalletScanner {
                     segwitAddresses.add(SegwitAddress.fromKey(btcParams, key).toString());
                 }
                 appendParallelResults(report, segwitAddresses, AutoWalletScanner::safeBitcoin,
-                        pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 3);
-
-                Bip32ECKeyPair master = Bip32ECKeyPair.generateKeyPair(seed);
-                report.append("\nETHEREUM — m/44'/60'/0'/0/i\n");
-                List<String> ethAddresses = new ArrayList<>();
-                for (int i = 0; i < addressCount; i++) {
-                    int[] path = {harden(44), harden(60), harden(0), 0, i};
-                    Bip32ECKeyPair key = Bip32ECKeyPair.deriveKeyPair(master, path);
-                    ethAddresses.add("0x" + Keys.getAddress(key));
-                }
-                appendParallelResults(report, ethAddresses, AutoWalletScanner::checkEthereum,
                         pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 3);
 
             } finally {
@@ -193,10 +179,6 @@ public final class AutoWalletScanner {
         return line.contains("وضعیت فعالیت: فعال");
     }
 
-    private static int harden(int n) {
-        return n | Bip32ECKeyPair.HARDENED_BIT;
-    }
-
     private static DeterministicKey deriveBitcoin(
             DeterministicKey master, int purpose, int index) {
         DeterministicKey key = HDKeyDerivation.deriveChildKey(master, new ChildNumber(purpose, true));
@@ -247,58 +229,6 @@ public final class AutoWalletScanner {
                     + " | در انتظار: " + pendingTx;
         } catch (Exception e) {
             return address + "\nخطا در بررسی BTC: " + e.getMessage();
-        }
-    }
-
-    private static String checkEthereum(String address) throws Exception {
-        return retry(() -> checkEthereumOnce(address));
-    }
-
-    private static String checkEthereumOnce(String address) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection)
-                new URL("https://ethereum-rpc.publicnode.com").openConnection();
-        try {
-            connection.setRequestMethod("POST");
-            connection.setConnectTimeout(15000);
-            connection.setReadTimeout(15000);
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/json");
-            String body = "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getBalance\","
-                    + "\"params\":[\"" + address + "\",\"latest\"],\"id\":1}";
-            try (OutputStream out = connection.getOutputStream()) {
-                out.write(body.getBytes("UTF-8"));
-            }
-            JSONObject json = new JSONObject(readResponse(connection));
-            if (json.has("error")) throw new Exception("Ethereum RPC error");
-            String hex = json.optString("result", "0x0");
-            BigInteger wei = new BigInteger(hex.substring(2), 16);
-            BigDecimal eth = new BigDecimal(wei).divide(
-                    new BigDecimal("1000000000000000000"), 18, RoundingMode.DOWN);
-
-            String activity = "نامشخص";
-            String txCountText = "نامشخص";
-            String latest = "";
-            try {
-                JSONObject details = getJson("https://eth.blockscout.com/api/v2/addresses/" + address);
-                long txCount = details.optLong("transactions_count", -1);
-                if (txCount >= 0) {
-                    txCountText = String.valueOf(txCount);
-                    activity = txCount > 0 ? "فعال" : "بدون سابقه تراکنش";
-                    if (txCount > 0) {
-                        JSONArray txs = getJson("https://eth.blockscout.com/api/v2/addresses/"
-                                + address + "/transactions").optJSONArray("items");
-                        if (txs != null && txs.length() > 0) {
-                            String timestamp = txs.getJSONObject(0).optString("timestamp", "");
-                            if (!timestamp.isEmpty()) latest = " | آخرین فعالیت: " + timestamp;
-                        }
-                    }
-                }
-            } catch (Exception ignored) { }
-            return address + "\nموجودی: " + eth.toPlainString() + " ETH"
-                    + " | وضعیت فعالیت: " + activity
-                    + " | تعداد تراکنش‌ها: " + txCountText + latest;
-        } finally {
-            connection.disconnect();
         }
     }
 
