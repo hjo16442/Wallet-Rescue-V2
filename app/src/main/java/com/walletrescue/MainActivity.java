@@ -6,6 +6,9 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ScrollView;
+import android.widget.Spinner;
+import android.widget.ArrayAdapter;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.appcompat.app.AlertDialog;
@@ -22,7 +25,7 @@ public class MainActivity extends AppCompatActivity {
 
     private EditText inputText;
     private TextView outputText, statusText, speedText;
-    private Button startBtn, stopBtn, generate12Btn, generate24Btn;
+    private Button startBtn, stopBtn, generate12Btn, generate24Btn, publicAddressBtn;
     private ScrollView outputScroll;
     private MnemonicRecovery engine;
     private long t0;
@@ -43,6 +46,8 @@ public class MainActivity extends AppCompatActivity {
         generate12Btn = findViewById(R.id.generate12Btn);
         generate24Btn = findViewById(R.id.generate24Btn);
         outputScroll = findViewById(R.id.outputScroll);
+        publicAddressBtn = findViewById(R.id.publicAddressBtn);
+        publicAddressBtn.setOnClickListener(v -> showPublicAddressScanner());
 
         stopBtn.setEnabled(false);
 
@@ -186,6 +191,105 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
         });
+    }
+
+    private void showPublicAddressScanner() {
+        if (scanning) {
+            statusText.setText("ابتدا بررسی جاری را متوقف کنید.");
+            return;
+        }
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        panel.setPadding(pad, pad, pad, 0);
+
+        EditText addressesInput = new EditText(this);
+        addressesInput.setHint("هر آدرس را در یک خط وارد کنید (حداکثر ۱۰۰ آدرس)");
+        addressesInput.setMinLines(5);
+        addressesInput.setMaxLines(8);
+        addressesInput.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
+        addressesInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        panel.addView(addressesInput, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        Spinner networkSpinner = new Spinner(this);
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item,
+                new String[]{"Bitcoin (BTC)", "Ethereum (ETH)"});
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        networkSpinner.setAdapter(adapter);
+        panel.addView(networkSpinner);
+
+        new AlertDialog.Builder(this)
+                .setTitle("بررسی فهرست آدرس‌های عمومی")
+                .setMessage("فقط آدرس‌هایی را وارد کنید که مالک آن‌ها هستید یا اجازه بررسی‌شان را دارید.")
+                .setView(panel)
+                .setPositiveButton("شروع بررسی", (dialog, which) -> {
+                    String raw = addressesInput.getText().toString();
+                    List<String> list = new java.util.ArrayList<>();
+                    for (String line : raw.split("[\\r\\n,;\\s]+")) {
+                        if (!line.trim().isEmpty()) list.add(line.trim());
+                    }
+                    if (list.isEmpty()) {
+                        statusText.setText("ابتدا آدرس‌های عمومی را وارد کنید.");
+                        return;
+                    }
+                    int network = networkSpinner.getSelectedItemPosition();
+                    beginPublicAddressScan(list, network);
+                })
+                .setNegativeButton("لغو", null)
+                .show();
+    }
+
+    private void beginPublicAddressScan(List<String> addresses, int network) {
+        scanCancelled = false;
+        scanning = true;
+        startBtn.setEnabled(false);
+        publicAddressBtn.setEnabled(false);
+        stopBtn.setEnabled(true);
+        outputText.setText("بررسی فهرست آدرس‌های عمومی آغاز شد...\\n");
+        statusText.setText("در حال بررسی " + (network == 0 ? "BTC" : "ETH") + "...");
+        speedText.setText("۰ از " + fmt(addresses.size()) + " آدرس");
+        t0 = SystemClock.elapsedRealtime();
+
+        new Thread(() -> {
+            try {
+                String report = AddressScanner.scan(this, addresses, network,
+                        (done, total) -> runOnUiThread(() -> {
+                            if (!scanCancelled) {
+                                long elapsed = Math.max(1, SystemClock.elapsedRealtime() - t0);
+                                long rate = done * 1000L / elapsed;
+                                statusText.setText("بررسی موازی — " + done + " از " + total);
+                                speedText.setText("⚡ " + fmt(done) + " / " + fmt(total)
+                                        + " آدرس  |  " + fmt(rate) + " آدرس/ثانیه");
+                            }
+                        }),
+                        () -> scanCancelled);
+                runOnUiThread(() -> {
+                    outputText.setText(report);
+                    statusText.setText(scanCancelled ? "بررسی متوقف شد." : "بررسی فهرست تمام شد.");
+                    speedText.setText(" ");
+                    finishPublicAddressOperation();
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    statusText.setText(scanCancelled ? "بررسی متوقف شد." : "خطا در بررسی آدرس‌ها");
+                    outputText.append("\\n" + (e.getMessage() == null ? e.toString() : e.getMessage()));
+                    speedText.setText(" ");
+                    finishPublicAddressOperation();
+                });
+            }
+        }).start();
+    }
+
+    private void finishPublicAddressOperation() {
+        scanning = false;
+        startBtn.setEnabled(true);
+        publicAddressBtn.setEnabled(true);
+        stopBtn.setEnabled(false);
     }
 
     private void beginWalletScan(String phrase) {
