@@ -95,7 +95,7 @@ public final class AutoWalletScanner {
                     segwitAddresses.add(SegwitAddress.fromKey(btcParams, key).toString());
                 }
                 appendParallelResults(report, segwitAddresses, AutoWalletScanner::safeBitcoin,
-                        pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 3);
+                        pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 2);
 
             } finally {
                 pool.shutdownNow();
@@ -129,9 +129,12 @@ public final class AutoWalletScanner {
                 } catch (Exception e) {
                     line = address + "\nخطا در بررسی: " + e.getMessage();
                 }
-                if (hasPositiveBalance(line) || hasActivity(line)) {
-                    found.incrementAndGet();
+                boolean positiveBalance = hasPositiveBalance(line);
+                if (positiveBalance || hasActivity(line)) {
                     synchronized (foundReport) { foundReport.append(line).append("\n\n"); }
+                }
+                if (positiveBalance) {
+                    found.incrementAndGet();
                     foundCallback.accept(line);
                 }
                 int done = checked.incrementAndGet();
