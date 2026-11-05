@@ -12,11 +12,18 @@ import java.math.RoundingMode;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.regex.Pattern;
 
 public class AddressScanner {
 
-    private static final int MAX_ADDRESSES = 20;
+    private static final int MAX_ADDRESSES = 100;
+    private static final int MAX_WORKERS = 4;
     private static final int MAX_ATTEMPTS = 3;
 
     private static final Pattern BTC_LEGACY =
@@ -35,63 +42,91 @@ public class AddressScanner {
 
     private AddressScanner() {}
 
+    public interface Progress {
+        void onProgress(int completed, int total);
+    }
+
     public static String scan(
             MainActivity activity,
             List<String> addresses,
             int network
     ) throws Exception {
+        return scan(activity, addresses, network, (done, total) -> {}, () -> false);
+    }
 
+    public interface CancelCheck {
+        boolean isCancelled();
+    }
+
+    public static String scan(
+            MainActivity activity,
+            List<String> addresses,
+            int network,
+            Progress progress,
+            CancelCheck cancelCheck
+    ) throws Exception {
         if (addresses == null || addresses.isEmpty()) {
             throw new Exception("هیچ آدرسی وارد نشده است.");
         }
-
         if (addresses.size() > MAX_ADDRESSES) {
-            throw new Exception("حداکثر ۲۰ آدرس در هر نوبت مجاز است.");
+            throw new Exception("حداکثر ۱۰۰ آدرس در هر نوبت مجاز است.");
         }
-
         if (network < 0 || network > 1) {
             throw new Exception("شبکه نامعتبر است.");
         }
 
+        List<String> valid = new ArrayList<>();
         StringBuilder output = new StringBuilder();
-        int checked = 0;
-
         for (String item : addresses) {
             String address = item == null ? "" : item.trim();
             if (address.isEmpty()) continue;
-
             if (!validAddress(address, network)) {
-                output.append("آدرس نامعتبر یا با قالب نادرست:\n")
-                      .append(address)
-                      .append("\n------------------\n");
-                continue;
-            }
-
-            try {
-                String result;
-                if (network == 0) {
-                    result = checkBitcoin(address);
-                } else if (network == 1) {
-                    result = checkEthereum(address);
-                } else {
-                    throw new Exception("شبکه نامعتبر است.");
-                }
-
-                output.append(result)
-                      .append("\n\n------------------\n");
-                checked++;
-            } catch (Exception e) {
-                output.append(address)
-                      .append("\nوضعیت: دریافت اطلاعات ناموفق؛ موجودی نامشخص است")
-                      .append("\nجزئیات خطا: ")
-                      .append(e.getMessage() == null ? "خطای ارتباط با سرویس" : e.getMessage())
-                      .append("\n------------------\n");
+                output.append("آدرس نامعتبر یا با قالب نادرست:\\n")
+                        .append(address).append("\\n------------------\\n");
+            } else {
+                valid.add(address);
             }
         }
+        if (valid.isEmpty()) {
+            output.append("\\nهیچ آدرس معتبری برای بررسی وجود نداشت.");
+            return output.toString();
+        }
 
-        output.append("\nتعداد آدرس‌های بررسی‌شده: ").append(checked);
-        output.append("\nاین گزارش فقط اطلاعات عمومی بلاک‌چین را می‌خواند؛");
-        output.append(" هیچ تراکنش یا انتقالی انجام نمی‌دهد.");
+        ExecutorService pool = Executors.newFixedThreadPool(Math.min(MAX_WORKERS, valid.size()));
+        ExecutorCompletionService<String> completion = new ExecutorCompletionService<>(pool);
+        try {
+            for (String address : valid) {
+                completion.submit(() -> {
+                    if (cancelCheck.isCancelled()) return address + "\\nوضعیت: بررسی متوقف شد";
+                    try {
+                        return network == 0 ? checkBitcoin(address) : checkEthereum(address);
+                    } catch (Exception e) {
+                        return address + "\\nوضعیت: دریافت اطلاعات ناموفق؛ موجودی نامشخص است"
+                                + "\\nجزئیات خطا: "
+                                + (e.getMessage() == null ? "خطای ارتباط با سرویس" : e.getMessage());
+                    }
+                });
+            }
+
+            int done = 0;
+            while (done < valid.size()) {
+                if (cancelCheck.isCancelled()) break;
+                Future<String> future = completion.take();
+                output.append(future.get()).append("\\n\\n------------------\\n");
+                done++;
+                progress.onProgress(done, valid.size());
+            }
+            if (done < valid.size()) {
+                output.append("\\nبررسی به درخواست کاربر متوقف شد.\\n");
+            }
+            output.append("\\nتعداد آدرس‌های معتبر بررسی‌شده: ").append(done)
+                    .append(" از ").append(valid.size());
+        } finally {
+            pool.shutdownNow();
+        }
+
+        output.append("\\nاین گزارش فقط اطلاعات عمومی بلاک‌چین را می‌خواند؛")
+                .append(" هیچ تراکنش یا انتقالی انجام نمی‌دهد.");
         return output.toString();
     }
 
