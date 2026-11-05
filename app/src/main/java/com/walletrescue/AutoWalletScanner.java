@@ -33,7 +33,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class AutoWalletScanner {
-    private static final int DEFAULT_ADDRESS_COUNT = 100;\n    private static final int MAX_WORKERS = 12;
+    private static final int DEFAULT_ADDRESS_COUNT = 100;
+    private static final int MAX_WORKERS = 12;
     private static final char[] BASE58 =
         "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".toCharArray();
 
