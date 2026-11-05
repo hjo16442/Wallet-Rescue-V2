@@ -5,9 +5,7 @@ import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.math.BigDecimal;
-import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -30,8 +28,6 @@ public class AddressScanner {
             Pattern.compile("^(1|3)[a-km-zA-HJ-NP-Z1-9]{25,34}$");
     private static final Pattern BTC_SEGWIT =
             Pattern.compile("^(bc1)[ac-hj-np-z02-9]{11,71}$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern ETH =
-            Pattern.compile("^0x[0-9a-fA-F]{40}$");
 
     private static final char[] BASE58 =
             "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".toCharArray();
@@ -71,7 +67,7 @@ public class AddressScanner {
         if (addresses.size() > MAX_ADDRESSES) {
             throw new Exception("حداکثر ۱۰۰ آدرس در هر نوبت مجاز است.");
         }
-        if (network < 0 || network > 1) {
+        if (network != 0) {
             throw new Exception("شبکه نامعتبر است.");
         }
 
@@ -99,7 +95,7 @@ public class AddressScanner {
                 completion.submit(() -> {
                     if (cancelCheck.isCancelled()) return address + "\\nوضعیت: بررسی متوقف شد";
                     try {
-                        return network == 0 ? checkBitcoin(address) : checkEthereum(address);
+                        return checkBitcoin(address);
                     } catch (Exception e) {
                         return address + "\\nوضعیت: دریافت اطلاعات ناموفق؛ موجودی نامشخص است"
                                 + "\\nجزئیات خطا: "
@@ -134,9 +130,6 @@ public class AddressScanner {
         if (network == 0) {
             return BTC_LEGACY.matcher(address).matches()
                     || BTC_SEGWIT.matcher(address).matches();
-        }
-        if (network == 1) {
-            return ETH.matcher(address).matches();
         }
         return false;
     }
@@ -173,48 +166,6 @@ public class AddressScanner {
     private static BigDecimal satsToBtc(long sats) {
         return BigDecimal.valueOf(sats)
                 .divide(new BigDecimal("100000000"), 8, RoundingMode.DOWN);
-    }
-
-    private static String checkEthereum(String address) throws Exception {
-        JSONObject json = retry(() -> ethereumBalanceRequest(address));
-        if (json.has("error")) {
-            throw new Exception("سرویس اتریوم خطای RPC برگرداند");
-        }
-        if (!json.has("result")) {
-            throw new Exception("پاسخ ناقص از سرویس اتریوم؛ موجودی نامشخص است");
-        }
-
-        String hex = json.optString("result", "");
-        if (!hex.matches("^0x[0-9a-fA-F]+$")) {
-            throw new Exception("مقدار موجودی اتریوم در پاسخ نامعتبر است");
-        }
-
-        BigInteger wei = new BigInteger(hex.substring(2), 16);
-        BigDecimal eth = new BigDecimal(wei).divide(
-                new BigDecimal("1000000000000000000"), 18, RoundingMode.DOWN);
-
-        return "Ethereum: " + address + "\nموجودی: " + eth.toPlainString() + " ETH";
-    }
-
-    private static JSONObject ethereumBalanceRequest(String address) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection)
-                new URL("https://ethereum-rpc.publicnode.com").openConnection();
-        try {
-            connection.setRequestMethod("POST");
-            connection.setConnectTimeout(15000);
-            connection.setReadTimeout(15000);
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/json");
-
-            String body = "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getBalance\","
-                    + "\"params\":[\"" + address + "\",\"latest\"],\"id\":1}";
-            try (OutputStream out = connection.getOutputStream()) {
-                out.write(body.getBytes("UTF-8"));
-            }
-            return new JSONObject(readResponse(connection));
-        } finally {
-            connection.disconnect();
-        }
     }
 
     private static JSONObject getJsonOnce(String url) throws Exception {
