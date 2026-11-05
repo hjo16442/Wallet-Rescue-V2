@@ -85,12 +85,13 @@ public class MainActivity extends AppCompatActivity {
             String phrase = MnemonicUtils.generateMnemonic(entropy);
             inputText.setText(phrase);
             inputText.setSelection(inputText.getText().length());
-            outputText.setText("عبارت بازیابی جدید روی همین گوشی تولید شد. آن را روی کاغذ و در مکانی امن نگهداری کنید.\n"
-                    + "این عبارت را برای هیچ‌کس نفرستید و از آن عکس یا نسخه آنلاین نسازید.\n"
-                    + "برای بررسی آدرس‌های همین کیف‌پول در شبکه اصلی، دکمه «شروع بررسی» را جداگانه بزنید.");
+            outputText.setText("عبارت بازیابی جدید روی همین گوشی تولید شد. آن را روی کاغذ و در مکانی امن نگهداری کنید.\\n"
+                    + "این عبارت را برای هیچ‌کس نفرستید و از آن عکس یا نسخه آنلاین نسازید.\\n"
+                    + "بررسی آدرس‌های همین عبارت به‌صورت خودکار آغاز می‌شود؛ عبارت و کلید خصوصی ارسال نمی‌شوند.");
             statusText.setText("عبارت " + (entropyBytes == 16 ? "۱۲" : "۲۴")
-                    + " کلمه‌ای BIP39 تولید شد — فقط روی دستگاه");
-            speedText.setText("تولید آفلاین است؛ هنوز هیچ بررسی شبکه‌ای انجام نشده.");
+                    + " کلمه‌ای BIP39 تولید شد — شروع بررسی خودکار...");
+            speedText.setText("در حال آماده‌سازی بررسی شبکه اصلی...");
+            beginWalletScan(phrase);
         } catch (Exception e) {
             statusText.setText("تولید عبارت ناموفق بود: " + e.getMessage());
         } finally {
