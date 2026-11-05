@@ -1,7 +1,6 @@
 package com.walletrescue;
 
 import android.os.Bundle;
-import android.content.SharedPreferences;
 import android.os.SystemClock;
 import android.view.View;
 import android.widget.Button;
@@ -21,7 +20,7 @@ import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
-    private EditText inputText, tronApiKeyInput;
+    private EditText inputText;
     private TextView outputText, statusText, speedText;
     private Button startBtn, stopBtn, generate12Btn, generate24Btn;
     private ScrollView outputScroll;
@@ -36,9 +35,6 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         inputText = findViewById(R.id.inputText);
-        tronApiKeyInput = findViewById(R.id.tronApiKeyInput);
-        tronApiKeyInput.setText(getSharedPreferences("wallet_rescue_settings", MODE_PRIVATE).getString("trongrid_api_key", ""));
-        findViewById(R.id.saveTronApiKeyBtn).setOnClickListener(v -> saveTronApiKey());
         outputText = findViewById(R.id.outputText);
         statusText = findViewById(R.id.statusText);
         speedText = findViewById(R.id.speedText);
@@ -62,15 +58,6 @@ public class MainActivity extends AppCompatActivity {
         stopBtn.setOnClickListener(v -> onStopClicked());
         generate12Btn.setOnClickListener(v -> generateMnemonic(16));
         generate24Btn.setOnClickListener(v -> generateMnemonic(32));
-    }
-
-    private void saveTronApiKey() {
-        String key = tronApiKeyInput.getText().toString().trim();
-        getSharedPreferences("wallet_rescue_settings", MODE_PRIVATE).edit()
-                .putString("trongrid_api_key", key).apply();
-        statusText.setText(key.isEmpty()
-                ? "کلید TronGrid پاک شد؛ بررسی TRON ممکن است با محدودیت 403 روبه‌رو شود."
-                : "کلید TronGrid فقط روی همین گوشی ذخیره شد.");
     }
 
     // Generate a wallet phrase locally using cryptographically secure entropy.
@@ -134,7 +121,7 @@ public class MainActivity extends AppCompatActivity {
             }
             new AlertDialog.Builder(this)
                     .setTitle("تأیید بررسی کیف‌پول خودتان")
-                    .setMessage("آدرس‌های مشتق‌شده از عبارت واردشده در شبکه‌های عمومی BTC، ETH و TRON بررسی می‌شوند. عبارت بازیابی و کلید خصوصی ارسال نمی‌شوند. ادامه می‌دهید؟")
+                    .setMessage("آدرس‌های مشتق‌شده از عبارت واردشده در شبکه‌های عمومی BTC و ETH بررسی می‌شوند. عبارت بازیابی و کلید خصوصی ارسال نمی‌شوند. ادامه می‌دهید؟")
                     .setPositiveButton("شروع بررسی", (d, w) -> beginWalletScan(phrase))
                     .setNegativeButton("لغو", null)
                     .show();
@@ -207,7 +194,7 @@ public class MainActivity extends AppCompatActivity {
         startBtn.setEnabled(false);
         stopBtn.setEnabled(true);
         outputText.setText("بررسی آدرس‌های مشتق‌شده شروع شد...\n");
-        statusText.setText("در حال بررسی BTC، ETH و TRON...");
+        statusText.setText("در حال بررسی BTC و ETH...");
         speedText.setText("۰ از ۴۰۰۰ آدرس");
         new Thread(() -> {
             try {
