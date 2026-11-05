@@ -1,6 +1,5 @@
 package com.walletrescue;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -12,8 +11,6 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.security.MessageDigest;
-import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -28,8 +25,6 @@ public class AddressScanner {
             Pattern.compile("^(bc1)[ac-hj-np-z02-9]{11,71}$", Pattern.CASE_INSENSITIVE);
     private static final Pattern ETH =
             Pattern.compile("^0x[0-9a-fA-F]{40}$");
-    private static final Pattern TRON =
-            Pattern.compile("^T[1-9A-HJ-NP-Za-km-z]{33}$");
 
     private static final char[] BASE58 =
             "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".toCharArray();
@@ -54,7 +49,7 @@ public class AddressScanner {
             throw new Exception("حداکثر ۲۰ آدرس در هر نوبت مجاز است.");
         }
 
-        if (network < 0 || network > 2) {
+        if (network < 0 || network > 1) {
             throw new Exception("شبکه نامعتبر است.");
         }
 
@@ -78,8 +73,6 @@ public class AddressScanner {
                     result = checkBitcoin(address);
                 } else if (network == 1) {
                     result = checkEthereum(address);
-                } else {
-                    result = checkTron(address, activity);
                 }
 
                 output.append(result)
@@ -107,22 +100,6 @@ public class AddressScanner {
         }
         if (network == 1) {
             return ETH.matcher(address).matches();
-        }
-        if (network == 2) {
-            if (!TRON.matcher(address).matches()) return false;
-            try {
-                byte[] decoded = decodeBase58(address);
-                if (decoded.length != 25 || decoded[0] != 0x41) return false;
-                byte[] payload = Arrays.copyOf(decoded, 21);
-                byte[] first = MessageDigest.getInstance("SHA-256").digest(payload);
-                byte[] second = MessageDigest.getInstance("SHA-256").digest(first);
-                for (int i = 0; i < 4; i++) {
-                    if (decoded[21 + i] != second[i]) return false;
-                }
-                return true;
-            } catch (Exception ignored) {
-                return false;
-            }
         }
         return false;
     }
@@ -203,39 +180,6 @@ public class AddressScanner {
         }
     }
 
-    private static String checkTron(String address, MainActivity activity) throws Exception {
-        String apiKey = activity.getSharedPreferences("wallet_rescue_settings", android.content.Context.MODE_PRIVATE)
-                .getString("trongrid_api_key", "").trim();
-        JSONObject json = retry(() -> getTronJsonOnce("https://api.trongrid.io/v1/accounts/" + address, apiKey));
-        JSONArray data = json.optJSONArray("data");
-        if (data == null) {
-            throw new Exception("پاسخ ناقص از سرویس TRON؛ موجودی نامشخص است");
-        }
-
-        long sun = 0;
-        if (data.length() > 0) {
-            JSONObject account = data.optJSONObject(0);
-            if (account == null || !account.has("balance")) {
-                throw new Exception("اطلاعات موجودی حساب TRON در پاسخ وجود ندارد");
-            }
-            sun = account.getLong("balance");
-        }
-
-        BigDecimal trx = BigDecimal.valueOf(sun)
-                .divide(new BigDecimal("1000000"), 6, RoundingMode.DOWN);
-        return "TRON: " + address + "\nموجودی: " + trx.toPlainString() + " TRX";
-    }
-
-    private static JSONObject getTronJsonOnce(String url, String apiKey) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        try {
-            connection.setConnectTimeout(15000);
-            connection.setReadTimeout(15000);
-            if (apiKey != null && !apiKey.isEmpty()) connection.setRequestProperty("TRON-PRO-API-KEY", apiKey);
-            return new JSONObject(readResponse(connection));
-        } finally { connection.disconnect(); }
-    }
-
     private static JSONObject getJsonOnce(String url) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         try {
@@ -302,35 +246,4 @@ public class AddressScanner {
         return out.toString();
     }
 
-    private static byte[] decodeBase58(String value) throws Exception {
-        BigInteger number = BigInteger.ZERO;
-        BigInteger base = BigInteger.valueOf(58);
-
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            int digit = -1;
-            for (int j = 0; j < BASE58.length; j++) {
-                if (BASE58[j] == c) {
-                    digit = j;
-                    break;
-                }
-            }
-            if (digit < 0) throw new Exception("Base58 نامعتبر");
-            number = number.multiply(base).add(BigInteger.valueOf(digit));
-        }
-
-        byte[] raw = number.toByteArray();
-        if (raw.length > 0 && raw[0] == 0) {
-            raw = Arrays.copyOfRange(raw, 1, raw.length);
-        }
-
-        int leadingZeros = 0;
-        while (leadingZeros < value.length() && value.charAt(leadingZeros) == '1') {
-            leadingZeros++;
-        }
-
-        byte[] decoded = new byte[leadingZeros + raw.length];
-        System.arraycopy(raw, 0, decoded, leadingZeros, raw.length);
-        return decoded;
-    }
 }
