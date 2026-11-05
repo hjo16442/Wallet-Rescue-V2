@@ -89,7 +89,7 @@ public final class AutoWalletScanner {
                     legacyAddresses.add(LegacyAddress.fromKey(btcParams, key).toString());
                 }
                 appendParallelResults(report, legacyAddresses, AutoWalletScanner::safeBitcoin,
-                        pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 4);
+                        pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 3);
 
                 report.append("\nBITCOIN — BIP84 (Native SegWit)\n");
                 List<String> segwitAddresses = new ArrayList<>();
@@ -98,7 +98,7 @@ public final class AutoWalletScanner {
                     segwitAddresses.add(SegwitAddress.fromKey(btcParams, key).toString());
                 }
                 appendParallelResults(report, segwitAddresses, AutoWalletScanner::safeBitcoin,
-                        pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 4);
+                        pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 3);
 
                 Bip32ECKeyPair master = Bip32ECKeyPair.generateKeyPair(seed);
                 report.append("\nETHEREUM — m/44'/60'/0'/0/i\n");
@@ -109,7 +109,7 @@ public final class AutoWalletScanner {
                     ethAddresses.add("0x" + Keys.getAddress(key));
                 }
                 appendParallelResults(report, ethAddresses, AutoWalletScanner::checkEthereum,
-                        pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 4);
+                        pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 3);
 
             } finally {
                 pool.shutdownNow();
