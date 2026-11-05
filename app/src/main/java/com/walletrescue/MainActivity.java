@@ -385,7 +385,7 @@ public class MainActivity extends AppCompatActivity {
         stopBtn.setEnabled(true);
         outputText.setText("بررسی آدرس‌های مشتق‌شده شروع شد...\n");
         statusText.setText("در حال بررسی BTC و ETH...");
-        speedText.setText("۰ از ۴۰۰۰ آدرس");
+        speedText.setText("۰ از ۳۰۰۰ آدرس");
         new Thread(() -> {
             try {
                 String report = AutoWalletScanner.scan(
