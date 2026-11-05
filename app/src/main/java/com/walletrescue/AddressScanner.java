@@ -195,41 +195,6 @@ public class AddressScanner {
         }
     }
 
-    private static <T> T retry(Request<T> request) throws Exception {
-        Exception lastError = null;
-        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-            try {
-                return request.run();
-            } catch (Exception e) {
-                lastError = e;
-                if (!isRetryable(e) || attempt == MAX_ATTEMPTS) break;
-                try {
-                    Thread.sleep(500L * attempt);
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                    throw new Exception("بررسی به درخواست توقف واکنش نشان داد", interrupted);
-                }
-            }
-        }
-        throw lastError == null ? new Exception("خطای نامشخص شبکه") : lastError;
-    }
-
-    private static boolean isRetryable(Exception error) {
-        String message = error.getMessage();
-        if (message == null) return true;
-        String lower = message.toLowerCase(java.util.Locale.ROOT);
-        if (lower.contains("http 4") && !lower.contains("http 429")) return false;
-        return lower.contains("http 429")
-                || lower.contains("http 5")
-                || lower.contains("timeout")
-                || lower.contains("timed out")
-                || lower.contains("connection")
-                || lower.contains("reset")
-                || lower.contains("temporarily")
-                || lower.contains("failed to connect")
-                || lower.contains("unexpected end");
-    }
-
     private static String readResponse(HttpURLConnection connection) throws Exception {
         int code = connection.getResponseCode();
         InputStream stream = code < 400
