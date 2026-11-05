@@ -58,7 +58,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        startBtn.setOnClickListener(v -> onStartClicked());
+        startBtn.setOnClickListener(v -> onStartButtonPressed());
         stopBtn.setOnClickListener(v -> onStopClicked());
         generate12Btn.setOnClickListener(v -> generateMnemonic(16));
         generate24Btn.setOnClickListener(v -> generateMnemonic(32));
@@ -96,6 +96,23 @@ public class MainActivity extends AppCompatActivity {
             statusText.setText("تولید عبارت ناموفق بود: " + e.getMessage());
         } finally {
             Arrays.fill(entropy, (byte) 0);
+        }
+    }
+
+    // Start creates a fresh local wallet when the phrase field is empty.
+    // If the owner has entered their own phrase, it checks that phrase instead.
+    private void onStartButtonPressed() {
+        String phrase = normalize(inputText.getText().toString());
+        if (phrase.isEmpty()) {
+            new AlertDialog.Builder(this)
+                    .setTitle("تولید عبارت بازیابی")
+                    .setMessage("نوع عبارت جدید را انتخاب کنید. عبارت فقط روی همین گوشی تولید می‌شود.")
+                    .setPositiveButton("۱۲ کلمه‌ای", (d, w) -> generateMnemonic(16))
+                    .setNegativeButton("۲۴ کلمه‌ای", (d, w) -> generateMnemonic(32))
+                    .setNeutralButton("انصراف", null)
+                    .show();
+        } else {
+            onStartClicked();
         }
     }
 
