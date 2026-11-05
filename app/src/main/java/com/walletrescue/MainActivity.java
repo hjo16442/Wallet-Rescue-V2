@@ -8,6 +8,7 @@ import android.widget.EditText;
 import android.widget.ScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -305,8 +306,12 @@ public class MainActivity extends AppCompatActivity {
                         () -> scanCancelled,
                         line -> runOnUiThread(() -> {
                             if (!scanCancelled) {
-                                outputText.append("\n✓ نتیجه غیرصفر: " + line + "\n");
-                                outputScroll.post(() -> outputScroll.fullScroll(View.FOCUS_DOWN));
+                                outputText.setText("⭐ موجودی مثبت بیت‌کوین پیدا شد:\n"
+                                        + line + "\n\n" + outputText.getText());
+                                outputScroll.post(() -> outputScroll.fullScroll(View.FOCUS_UP));
+                                Toast.makeText(getApplicationContext(),
+                                        "موجودی مثبت در یک آدرس بیت‌کوین پیدا شد",
+                                        Toast.LENGTH_LONG).show();
                             }
                         })
                 );
