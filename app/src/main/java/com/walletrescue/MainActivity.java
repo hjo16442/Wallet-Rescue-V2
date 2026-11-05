@@ -6,8 +6,6 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ScrollView;
-import android.widget.Spinner;
-import android.widget.ArrayAdapter;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -25,7 +23,7 @@ public class MainActivity extends AppCompatActivity {
 
     private EditText inputText;
     private TextView outputText, statusText, speedText;
-    private Button startBtn, stopBtn, generate12Btn, generate24Btn, publicAddressBtn, tronPermissionBtn;
+    private Button startBtn, stopBtn, generate12Btn, generate24Btn, publicAddressBtn;
     private ScrollView outputScroll;
     private MnemonicRecovery engine;
     private long t0;
@@ -48,8 +46,6 @@ public class MainActivity extends AppCompatActivity {
         outputScroll = findViewById(R.id.outputScroll);
         publicAddressBtn = findViewById(R.id.publicAddressBtn);
         publicAddressBtn.setOnClickListener(v -> showPublicAddressScanner());
-        tronPermissionBtn = findViewById(R.id.tronPermissionBtn);
-        tronPermissionBtn.setOnClickListener(v -> showTronPermissionScanner());
 
         stopBtn.setEnabled(false);
 
@@ -128,7 +124,7 @@ public class MainActivity extends AppCompatActivity {
             }
             new AlertDialog.Builder(this)
                     .setTitle("تأیید بررسی کیف‌پول خودتان")
-                    .setMessage("آدرس‌های مشتق‌شده از عبارت واردشده در شبکه‌های عمومی BTC و ETH بررسی می‌شوند. عبارت بازیابی و کلید خصوصی ارسال نمی‌شوند. ادامه می‌دهید؟")
+                    .setMessage("آدرس‌های مشتق‌شده از عبارت واردشده در شبکه اصلی بیت‌کوین بررسی می‌شوند. عبارت بازیابی و کلید خصوصی ارسال نمی‌شوند. ادامه می‌دهید؟")
                     .setPositiveButton("شروع بررسی", (d, w) -> beginWalletScan(phrase))
                     .setNegativeButton("لغو", null)
                     .show();
@@ -196,89 +192,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    // Offline-only derivation check for the user's own TRON permission address.
-    private void showTronPermissionScanner() {
-        if (scanning) {
-            statusText.setText("ابتدا بررسی جاری را متوقف کنید.");
-            return;
-        }
-        String phrase = normalize(inputText.getText().toString());
-        if (!SafeMnemonicRecovery.isValidCompletePhrase(this, phrase)) {
-            statusText.setText("ابتدا عبارت کامل و معتبر BIP39 خودتان را در کادر بالا وارد کنید.");
-            return;
-        }
-
-        EditText targetInput = new EditText(this);
-        targetInput.setSingleLine(true);
-        targetInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT
-                | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        targetInput.setHint("آدرس عمومی TRON برای مقایسه");
-        targetInput.setText("TUmdykWXNWHbRk3V4wFGKGHKMdh6jHzijm");
-
-        new AlertDialog.Builder(this)
-                .setTitle("بررسی آفلاین مجوز امضای TRON")
-                .setMessage("این بررسی فقط مسیرهای مشتق‌سازی رایج TRON را روی همین گوشی امتحان می‌کند. "
-                        + "هیچ درخواست اینترنتی، ارسال عبارت، ذخیره‌سازی عبارت، امضای تراکنش یا انتقال وجه انجام نمی‌شود. "
-                        + "برای احتیاط، پیش از اجرای بررسی اینترنت گوشی را خاموش کنید و فقط عبارت کیف پولی را وارد کنید که مالک آن هستید.")
-                .setView(targetInput)
-                .setPositiveButton("شروع بررسی آفلاین", (dialog, which) -> {
-                    String target = targetInput.getText().toString().trim();
-                    beginTronPermissionScan(phrase, target);
-                })
-                .setNegativeButton("لغو", null)
-                .show();
-    }
-
-    private void beginTronPermissionScan(String phrase, String target) {
-        scanCancelled = false;
-        scanning = true;
-        startBtn.setEnabled(false);
-        publicAddressBtn.setEnabled(false);
-        tronPermissionBtn.setEnabled(false);
-        stopBtn.setEnabled(true);
-        outputText.setText("بررسی آفلاین مسیرهای مشتق‌سازی TRON آغاز شد...\\n");
-        statusText.setText("در حال مشتق‌سازی آدرس‌ها روی گوشی...");
-        speedText.setText("۰ از ۲۲۲۲ مسیر");
-        new Thread(() -> {
-            try {
-                String report = TronDerivationScanner.scan(
-                        phrase, target,
-                        (done, total) -> runOnUiThread(() -> {
-                            if (!scanCancelled) {
-                                statusText.setText("بررسی آفلاین TRON — " + fmt(done) + " از " + fmt(total));
-                                speedText.setText(fmt((long) done * 100 / total) + "٪");
-                            }
-                        }),
-                        () -> scanCancelled
-                );
-                runOnUiThread(() -> {
-                    outputText.setText(report);
-                    statusText.setText(scanCancelled ? "بررسی متوقف شد." : "بررسی آفلاین پایان یافت.");
-                    speedText.setText(" ");
-                    inputText.setText("");
-                    scanning = false;
-                    startBtn.setEnabled(true);
-                    publicAddressBtn.setEnabled(true);
-                    tronPermissionBtn.setEnabled(true);
-                    stopBtn.setEnabled(false);
-                    outputScroll.post(() -> outputScroll.fullScroll(View.FOCUS_DOWN));
-                });
-            } catch (Exception e) {
-                runOnUiThread(() -> {
-                    statusText.setText("خطا در بررسی آفلاین TRON");
-                    outputText.setText(e.getMessage() == null ? e.toString() : e.getMessage());
-                    speedText.setText(" ");
-                    inputText.setText("");
-                    scanning = false;
-                    startBtn.setEnabled(true);
-                    publicAddressBtn.setEnabled(true);
-                    tronPermissionBtn.setEnabled(true);
-                    stopBtn.setEnabled(false);
-                });
-            }
-        }).start();
-    }
-
     private void showPublicAddressScanner() {
         if (scanning) {
             statusText.setText("ابتدا بررسی جاری را متوقف کنید.");
@@ -301,14 +214,6 @@ public class MainActivity extends AppCompatActivity {
         panel.addView(addressesInput, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        Spinner networkSpinner = new Spinner(this);
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item,
-                new String[]{"Bitcoin (BTC)", "Ethereum (ETH)"});
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        networkSpinner.setAdapter(adapter);
-        panel.addView(networkSpinner);
-
         new AlertDialog.Builder(this)
                 .setTitle("بررسی فهرست آدرس‌های عمومی")
                 .setMessage("فقط آدرس‌هایی را وارد کنید که مالک آن‌ها هستید یا اجازه بررسی‌شان را دارید.")
@@ -323,8 +228,7 @@ public class MainActivity extends AppCompatActivity {
                         statusText.setText("ابتدا آدرس‌های عمومی را وارد کنید.");
                         return;
                     }
-                    int network = networkSpinner.getSelectedItemPosition();
-                    beginPublicAddressScan(list, network);
+                    beginPublicAddressScan(list, 0);
                 })
                 .setNegativeButton("لغو", null)
                 .show();
@@ -384,8 +288,8 @@ public class MainActivity extends AppCompatActivity {
         startBtn.setEnabled(false);
         stopBtn.setEnabled(true);
         outputText.setText("بررسی آدرس‌های مشتق‌شده شروع شد...\n");
-        statusText.setText("در حال بررسی BTC و ETH...");
-        speedText.setText("۰ از ۳۰۰۰ آدرس");
+        statusText.setText("در حال بررسی بیت‌کوین...");
+        speedText.setText("۰ از ۲۰۰۰ آدرس");
         new Thread(() -> {
             try {
                 String report = AutoWalletScanner.scan(
@@ -394,7 +298,7 @@ public class MainActivity extends AppCompatActivity {
                         1000,
                         (done, total) -> runOnUiThread(() -> {
                             if (!scanCancelled) {
-                                statusText.setText("در حال بررسی شبکه‌ها...");
+                                statusText.setText("در حال بررسی بیت‌کوین...");
                                 speedText.setText(fmt(done) + " از " + fmt(total) + " آدرس");
                             }
                         }),
