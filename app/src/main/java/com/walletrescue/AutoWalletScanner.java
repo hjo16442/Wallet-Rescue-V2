@@ -13,7 +13,6 @@ import org.json.JSONObject;
 import org.web3j.crypto.Bip32ECKeyPair;
 import org.web3j.crypto.Keys;
 import org.web3j.crypto.MnemonicUtils;
-import org.web3j.utils.Numeric;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -24,7 +23,6 @@ import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
@@ -113,17 +111,6 @@ public final class AutoWalletScanner {
                 appendParallelResults(report, ethAddresses, AutoWalletScanner::checkEthereum,
                         pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 4);
 
-                report.append("\nTRON — m/44'/195'/0'/0/i\n");
-                List<String> tronAddresses = new ArrayList<>();
-                for (int i = 0; i < addressCount; i++) {
-                    int[] path = {harden(44), harden(195), harden(0), 0, i};
-                    Bip32ECKeyPair key = Bip32ECKeyPair.deriveKeyPair(master, path);
-                    tronAddresses.add(tronAddress(key));
-                }
-                String tronApiKey = context.getSharedPreferences("wallet_rescue_settings", Context.MODE_PRIVATE)
-                        .getString("trongrid_api_key", "").trim();
-                appendParallelResults(report, tronAddresses, address -> checkTron(address, tronApiKey),
-                        pool, progress, cancelled, foundCallback, foundReport, checked, found, addressCount * 4);
             } finally {
                 pool.shutdownNow();
             }
@@ -313,76 +300,6 @@ public final class AutoWalletScanner {
         } finally {
             connection.disconnect();
         }
-    }
-
-    private static String checkTron(String address, String apiKey) throws Exception {
-        JSONObject json = getTronJson("https://api.trongrid.io/v1/accounts/" + address, apiKey);
-        JSONArray data = json.optJSONArray("data");
-        long sun = 0;
-        if (data != null && data.length() > 0) {
-            sun = data.getJSONObject(0).optLong("balance", 0);
-        }
-        BigDecimal trx = BigDecimal.valueOf(sun).divide(new BigDecimal("1000000"));
-        String activity = "نامشخص";
-        String latest = "";
-        try {
-            JSONObject history = getTronJson("https://api.trongrid.io/v1/accounts/" + address
-                    + "/transactions?only_confirmed=true&limit=1&order_by=block_timestamp,desc", apiKey);
-            JSONArray txs = history.optJSONArray("data");
-            if (txs != null) {
-                if (txs.length() > 0) {
-                    activity = "فعال (دارای سابقه تراکنش)";
-                    long timestamp = txs.getJSONObject(0).optLong("block_timestamp", 0);
-                    if (timestamp > 0) latest = " | آخرین فعالیت: " + new java.text.SimpleDateFormat(
-                            "yyyy-MM-dd HH:mm", java.util.Locale.US)
-                            .format(new java.util.Date(timestamp)) + " UTC";
-                } else {
-                    activity = "بدون سابقه تراکنش تأییدشده";
-                }
-            }
-        } catch (Exception ignored) { }
-        return address + "\nموجودی: " + trx.toPlainString() + " TRX"
-                + " | وضعیت فعالیت: " + activity + latest;
-    }
-
-    private static String tronAddress(Bip32ECKeyPair key) throws Exception {
-        byte[] evm = Numeric.hexStringToByteArray(Keys.getAddress(key));
-        byte[] payload = new byte[21];
-        payload[0] = 0x41;
-        System.arraycopy(evm, 0, payload, 1, 20);
-        byte[] first = MessageDigest.getInstance("SHA-256").digest(payload);
-        byte[] second = MessageDigest.getInstance("SHA-256").digest(first);
-        byte[] full = Arrays.copyOf(payload, payload.length + 4);
-        System.arraycopy(second, 0, full, payload.length, 4);
-        return base58(full);
-    }
-
-    private static String base58(byte[] input) {
-        BigInteger value = new BigInteger(1, input);
-        StringBuilder out = new StringBuilder();
-        BigInteger base = BigInteger.valueOf(58);
-        while (value.signum() > 0) {
-            BigInteger[] div = value.divideAndRemainder(base);
-            out.append(BASE58[div[1].intValue()]);
-            value = div[0];
-        }
-        for (byte b : input) {
-            if (b == 0) out.append(BASE58[0]);
-            else break;
-        }
-        return out.reverse().toString();
-    }
-
-    private static JSONObject getTronJson(String url, String apiKey) throws Exception {
-        return retry(() -> {
-            HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-            try {
-                connection.setConnectTimeout(15000);
-                connection.setReadTimeout(15000);
-                if (apiKey != null && !apiKey.isEmpty()) connection.setRequestProperty("TRON-PRO-API-KEY", apiKey);
-                return new JSONObject(readResponse(connection));
-            } finally { connection.disconnect(); }
-        });
     }
 
     private static JSONObject getJsonFast(String url) throws Exception {
