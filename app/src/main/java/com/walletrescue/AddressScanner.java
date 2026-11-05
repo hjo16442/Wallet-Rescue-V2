@@ -22,7 +22,6 @@ public class AddressScanner {
 
     private static final int MAX_ADDRESSES = 100;
     private static final int MAX_WORKERS = 4;
-    private static final int MAX_ATTEMPTS = 3;
 
     private static final Pattern BTC_LEGACY =
             Pattern.compile("^(1|3)[a-km-zA-HJ-NP-Z1-9]{25,34}$");
@@ -135,32 +134,47 @@ public class AddressScanner {
     }
 
     private static String checkBitcoin(String address) throws Exception {
-        JSONObject json = retry(() -> getJsonOnce("https://mempool.space/api/address/" + address));
-        JSONObject chain = json.optJSONObject("chain_stats");
-        JSONObject mempool = json.optJSONObject("mempool_stats");
-        if (chain == null || mempool == null) {
-            throw new Exception("پاسخ ناقص از سرویس بیت‌کوین؛ موجودی قابل تأیید نیست");
+        // Try two independent public explorers so one unavailable API cannot stall the scan.
+        String[] endpoints = {
+                "https://mempool.space/api/address/",
+                "https://blockstream.info/api/address/"
+        };
+        Exception lastError = null;
+        for (String endpoint : endpoints) {
+            try {
+                JSONObject json = getJsonOnce(endpoint + address);
+                JSONObject chain = json.optJSONObject("chain_stats");
+                JSONObject mempool = json.optJSONObject("mempool_stats");
+                if (chain == null || mempool == null) {
+                    throw new Exception("پاسخ ناقص از سرویس بیت‌کوین");
+                }
+
+                long received = chain.getLong("funded_txo_sum");
+                long spent = chain.getLong("spent_txo_sum");
+                long pendingReceived = mempool.getLong("funded_txo_sum");
+                long pendingSpent = mempool.getLong("spent_txo_sum");
+                long txCount = chain.optLong("tx_count", 0);
+
+                long confirmedSats = received - spent;
+                long pendingSats = pendingReceived - pendingSpent;
+                long totalSats = confirmedSats + pendingSats;
+
+                BigDecimal confirmed = satsToBtc(confirmedSats);
+                BigDecimal pending = satsToBtc(pendingSats);
+                BigDecimal total = satsToBtc(totalSats);
+
+                return "Bitcoin: " + address
+                        + "\nموجودی تأییدشده: " + confirmed.toPlainString() + " BTC"
+                        + "\nموجودی در انتظار تأیید: " + pending.toPlainString() + " BTC"
+                        + "\nمجموع موجودی: " + total.toPlainString() + " BTC"
+                        + "\nتعداد تراکنش‌های تأییدشده: " + txCount
+                        + "\nمنبع: " + endpoint;
+            } catch (Exception e) {
+                lastError = e;
+            }
         }
-
-        long received = chain.getLong("funded_txo_sum");
-        long spent = chain.getLong("spent_txo_sum");
-        long pendingReceived = mempool.getLong("funded_txo_sum");
-        long pendingSpent = mempool.getLong("spent_txo_sum");
-        long txCount = chain.optLong("tx_count", 0);
-
-        long confirmedSats = received - spent;
-        long pendingSats = pendingReceived - pendingSpent;
-        long totalSats = confirmedSats + pendingSats;
-
-        BigDecimal confirmed = satsToBtc(confirmedSats);
-        BigDecimal pending = satsToBtc(pendingSats);
-        BigDecimal total = satsToBtc(totalSats);
-
-        return "Bitcoin: " + address
-                + "\nموجودی تأییدشده: " + confirmed.toPlainString() + " BTC"
-                + "\nموجودی در انتظار تأیید: " + pending.toPlainString() + " BTC"
-                + "\nمجموع موجودی: " + total.toPlainString() + " BTC"
-                + "\nتعداد تراکنش‌های تأییدشده: " + txCount;
+        throw new Exception("هر دو سرویس بررسی بیت‌کوین در دسترس نبودند. "
+                + (lastError == null ? "" : lastError.getMessage()));
     }
 
     private static BigDecimal satsToBtc(long sats) {
@@ -171,8 +185,10 @@ public class AddressScanner {
     private static JSONObject getJsonOnce(String url) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         try {
-            connection.setConnectTimeout(15000);
-            connection.setReadTimeout(15000);
+            connection.setConnectTimeout(8000);
+            connection.setReadTimeout(8000);
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("User-Agent", "WalletRescue/2.8");
             return new JSONObject(readResponse(connection));
         } finally {
             connection.disconnect();
