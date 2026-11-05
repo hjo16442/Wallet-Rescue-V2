@@ -73,6 +73,8 @@ public class AddressScanner {
                     result = checkBitcoin(address);
                 } else if (network == 1) {
                     result = checkEthereum(address);
+                } else {
+                    throw new Exception("شبکه نامعتبر است.");
                 }
 
                 output.append(result)
