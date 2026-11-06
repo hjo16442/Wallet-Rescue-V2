@@ -37,18 +37,15 @@ jobs:
           java-version: '17'
           cache: maven
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.11.1'
-
       - name: Build AI engine
-        run: mvn -B -q -f pom.xml package
+        working-directory: target
+        run: mvn -B -q package
 
       - name: Run AI Developer
+        working-directory: target
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
-          TARGET_DIR: target
-        run: mvn -B -q -f pom.xml exec:java -Dexec.mainClass="Main"
+          TARGET_DIR: .
+        run: mvn -B -q exec:java -Dexec.mainClass="Main"
