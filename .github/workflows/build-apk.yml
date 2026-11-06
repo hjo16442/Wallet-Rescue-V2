@@ -6,6 +6,9 @@ on:
     branches:
       - main
       - feature/robat2-android-app
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
