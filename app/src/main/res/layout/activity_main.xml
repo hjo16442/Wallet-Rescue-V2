@@ -1,128 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="12dp">
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:orientation="vertical">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="تولید یا وارد کردن عبارت بازیابی BIP39:"
-            android:textStyle="bold" />
-
-        <Button
-            android:id="@+id/generate12Btn"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="تولید عبارت جدید ۱۲ کلمه‌ای (آفلاین)" />
-
-        <Button
-            android:id="@+id/generate24Btn"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="تولید عبارت جدید ۲۴ کلمه‌ای (آفلاین)" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="عبارت فقط روی گوشی ساخته می‌شود. آن را محرمانه و آفلاین نگهداری کنید."
-            android:textSize="12sp" />
-
-        <EditText
-            android:id="@+id/inputText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:minLines="3"
-            android:gravity="top|start"
-            android:fontFamily="monospace"
-            android:inputType="textMultiLine|textNoSuggestions"
-            android:layout_marginTop="8dp"
-            android:hint="عبارت خودتان را وارد کنید؛ برای یک کلمه گمشده از ? استفاده کنید" />
-
-        <Button
-            android:id="@+id/startBtn"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="▶ بررسی عبارت و آدرس‌ها در شبکه اصلی" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="بررسی آنلاین شبکه اصلی BTC و ETH؛ فقط عبارت متعلق به خودتان را وارد کنید. عبارت و کلید خصوصی ارسال نمی‌شوند."
-            android:textSize="12sp" />
-
-        <Button
-            android:id="@+id/publicAddressBtn"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="⚡ بررسی سریع فهرست آدرس‌های عمومی BTC / ETH" />
-
-        <Button
-            android:id="@+id/stopBtn"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="■ توقف"
-            android:enabled="false"
-            android:layout_marginTop="4dp" />
-
-        <TextView
-            android:id="@+id/statusText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="آماده — شبکه اصلی BTC / ETH"
-            android:paddingTop="8dp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/speedText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text=" "
-            android:textSize="12sp"
-            android:textColor="#666" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="نتایج:"
-            android:textStyle="bold"
-            android:layout_marginTop="8dp" />
-
-        <ScrollView
-            android:id="@+id/outputScroll"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:layout_marginTop="4dp"
-            android:background="#F5F5F5"
-            android:padding="8dp"
-            android:scrollbars="vertical"
-            android:fadeScrollbars="false"
-            android:scrollbarFadeDuration="0"
-            android:scrollbarSize="8dp"
-            android:scrollbarStyle="insideInset"
-            android:scrollbarAlwaysDrawVerticalTrack="true">
-
-            <TextView
-                android:id="@+id/outputText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:fontFamily="monospace"
-                android:textIsSelectable="true"
-                android:textSize="13sp" />
-        </ScrollView>
-    </LinearLayout>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="12dp">
+<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Wallet Rescue — فقط بیت‌کوین (BTC)" android:textSize="20sp" android:textStyle="bold"/>
+<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="آدرس‌های عمومی BTC خودت یا آدرس‌هایی را که اجازه بررسی‌شان را داری وارد کن. هر آدرس در یک خط؛ حداکثر ۱۰۰ آدرس."/>
+<EditText android:id="@+id/inputText" android:layout_width="match_parent" android:layout_height="wrap_content" android:minLines="4" android:maxLines="8" android:gravity="top|start" android:fontFamily="monospace" android:inputType="textMultiLine|textNoSuggestions" android:layout_marginTop="8dp" android:hint="آدرس BTC (1…، 3… یا bc1…)"/>
+<Button android:id="@+id/startBtn" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="▶ بررسی موجودی BTC"/>
+<Button android:id="@+id/stopBtn" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="■ توقف" android:enabled="false"/>
+<TextView android:id="@+id/statusText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="آماده — فقط شبکه اصلی بیت‌کوین" android:paddingTop="8dp" android:textStyle="bold"/>
+<TextView android:id="@+id/speedText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text=" " android:textSize="12sp" android:textColor="#666"/>
+<TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="نتایج:" android:textStyle="bold" android:layout_marginTop="8dp"/>
+<ScrollView android:id="@+id/outputScroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="4dp" android:background="#F5F5F5" android:padding="8dp">
+<TextView android:id="@+id/outputText" android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="monospace" android:textIsSelectable="true" android:textSize="13sp"/>
+</ScrollView>
 </LinearLayout>
