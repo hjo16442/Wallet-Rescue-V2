@@ -13,9 +13,12 @@ import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import org.web3j.crypto.Bip32ECKeyPair;
+import org.web3j.crypto.Keys;
 import org.web3j.crypto.MnemonicUtils;
 
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -64,7 +67,7 @@ public class MainActivity extends AppCompatActivity {
         generate24Btn.setOnClickListener(v -> generateMnemonic(32));
     }
 
-    // Generate a wallet phrase locally using cryptographically secure entropy.
+    // ---------- تولید عبارت جدید ----------
     private void generateMnemonic(int entropyBytes) {
         if (scanning) {
             statusText.setText("ابتدا بررسی جاری را متوقف کنید.");
@@ -76,8 +79,8 @@ public class MainActivity extends AppCompatActivity {
             String phrase = MnemonicUtils.generateMnemonic(entropy);
             inputText.setText(phrase);
             inputText.setSelection(inputText.getText().length());
-            outputText.setText("عبارت بازیابی جدید روی همین گوشی تولید شد. آن را روی کاغذ و در مکانی امن نگهداری کنید.\\n"
-                    + "این عبارت را برای هیچ‌کس نفرستید و از آن عکس یا نسخه آنلاین نسازید.\\n"
+            outputText.setText("عبارت بازیابی جدید روی همین گوشی تولید شد. آن را روی کاغذ و در مکانی امن نگهداری کنید.\n"
+                    + "این عبارت را برای هیچ‌کس نفرستید و از آن عکس یا نسخه آنلاین نسازید.\n"
                     + "بررسی آدرس‌های همین عبارت به‌صورت خودکار آغاز می‌شود؛ عبارت و کلید خصوصی ارسال نمی‌شوند.");
             statusText.setText("عبارت " + (entropyBytes == 16 ? "۱۲" : "۲۴")
                     + " کلمه‌ای BIP39 تولید شد — شروع بررسی خودکار...");
@@ -90,8 +93,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Start creates a fresh local wallet when the phrase field is empty.
-    // If the owner has entered their own phrase, it checks that phrase instead.
+    // ---------- شروع بررسی با عبارت ----------
     private void onStartButtonPressed() {
         String phrase = normalize(inputText.getText().toString());
         if (phrase.isEmpty()) {
@@ -192,13 +194,31 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-
+    // ==========================================================
+    //  بخش آدرس: انتخاب حالت (بررسی موجودی / تطبیق با عبارت‌ها)
+    // ==========================================================
     private void showPublicAddressScanner() {
         if (scanning) {
             statusText.setText("ابتدا بررسی جاری را متوقف کنید.");
             return;
         }
+        new AlertDialog.Builder(this)
+                .setTitle("ابزار بررسی آدرس")
+                .setItems(new String[]{
+                        "بررسی موجودی فهرست آدرس‌های عمومی",
+                        "تطبیق آدرس هدف با عبارت‌های بازیابی"
+                }, (d, which) -> {
+                    if (which == 0) {
+                        showBalanceScannerDialog();
+                    } else {
+                        showMatchWithPhrasesDialog();
+                    }
+                })
+                .show();
+    }
 
+    // ---------- حالت ۱: بررسی موجودی فهرست آدرس‌ها (رفتار قبلی) ----------
+    private void showBalanceScannerDialog() {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         int pad = (int) (16 * getResources().getDisplayMetrics().density);
@@ -221,7 +241,7 @@ public class MainActivity extends AppCompatActivity {
                 .setView(panel)
                 .setPositiveButton("شروع بررسی", (dialog, which) -> {
                     String raw = addressesInput.getText().toString();
-                    List<String> list = new java.util.ArrayList<>();
+                    List<String> list = new ArrayList<>();
                     for (String line : raw.split("[\\r\\n,;\\s]+")) {
                         if (!line.trim().isEmpty()) list.add(line.trim());
                     }
@@ -241,7 +261,7 @@ public class MainActivity extends AppCompatActivity {
         startBtn.setEnabled(false);
         publicAddressBtn.setEnabled(false);
         stopBtn.setEnabled(true);
-        outputText.setText("بررسی فهرست آدرس‌های عمومی آغاز شد...\\n");
+        outputText.setText("بررسی فهرست آدرس‌های عمومی آغاز شد...\n");
         statusText.setText("در حال بررسی " + (network == 0 ? "BTC" : "ETH") + "...");
         speedText.setText("۰ از " + fmt(addresses.size()) + " آدرس");
         t0 = SystemClock.elapsedRealtime();
@@ -268,12 +288,169 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     statusText.setText(scanCancelled ? "بررسی متوقف شد." : "خطا در بررسی آدرس‌ها");
-                    outputText.append("\\n" + (e.getMessage() == null ? e.toString() : e.getMessage()));
+                    outputText.append("\n" + (e.getMessage() == null ? e.toString() : e.getMessage()));
                     speedText.setText(" ");
                     finishPublicAddressOperation();
                 });
             }
         }).start();
+    }
+
+    // ---------- حالت ۲: تطبیق آدرس هدف با عبارت‌ها ----------
+    private void showMatchWithPhrasesDialog() {
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        panel.setPadding(pad, pad, pad, 0);
+
+        EditText targetInput = new EditText(this);
+        targetInput.setHint("آدرس عمومی کیف پول هدف (مثلاً 0x...)");
+        targetInput.setSingleLine(true);
+        targetInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        panel.addView(targetInput, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        EditText phrasesInput = new EditText(this);
+        phrasesInput.setHint("هر عبارت بازیابی را در یک خط جداگانه وارد کنید (یکی در هر خط)");
+        phrasesInput.setMinLines(5);
+        phrasesInput.setMaxLines(10);
+        phrasesInput.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
+        phrasesInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = (int) (8 * getResources().getDisplayMetrics().density);
+        panel.addView(phrasesInput, lp);
+
+        new AlertDialog.Builder(this)
+                .setTitle("تطبیق آدرس هدف با عبارت‌ها")
+                .setMessage("آدرس هدف و عبارت‌های بازیابی متعلق به خودتان را وارد کنید. برنامه آدرس‌ها را از هر عبارت مشتق و با آدرس هدف مقایسه می‌کند. هیچ چیزی از گوشی خارج نمی‌شود.")
+                .setView(panel)
+                .setPositiveButton("شروع تطبیق", (dialog, which) -> {
+                    String target = targetInput.getText().toString().trim();
+                    if (target.isEmpty()) {
+                        statusText.setText("آدرس هدف را وارد کنید.");
+                        return;
+                    }
+                    List<String> phrases = new ArrayList<>();
+                    for (String line : phrasesInput.getText().toString().split("\\r?\\n")) {
+                        String t = line.trim();
+                        if (!t.isEmpty()) phrases.add(t);
+                    }
+                    if (phrases.isEmpty()) {
+                        statusText.setText("حداقل یک عبارت بازیابی وارد کنید.");
+                        return;
+                    }
+                    beginAddressMatching(target, phrases);
+                })
+                .setNegativeButton("لغو", null)
+                .show();
+    }
+
+    private void beginAddressMatching(String target, List<String> phrases) {
+        scanCancelled = false;
+        scanning = true;
+        startBtn.setEnabled(false);
+        publicAddressBtn.setEnabled(false);
+        stopBtn.setEnabled(true);
+
+        String targetLower = target.toLowerCase(Locale.ROOT);
+        boolean isEth = targetLower.startsWith("0x") && targetLower.length() == 42;
+        if (!isEth) {
+            scanning = false;
+            startBtn.setEnabled(true);
+            publicAddressBtn.setEnabled(true);
+            stopBtn.setEnabled(false);
+            statusText.setText("آدرس نامعتبر یا پشتیبانی‌نشده");
+            outputText.setText("آدرس هدف باید یک آدرس ETH معتبر (0x + 40 کاراکتر hex) باشد.\n"
+                    + "برای BTC تطبیق در این نسخه پشتیبانی نمی‌شود.");
+            return;
+        }
+
+        outputText.setText("آدرس هدف: " + target + "\n\nدر حال بررسی " + phrases.size() + " عبارت...\n\n");
+        statusText.setText("آماده‌سازی تطبیق...");
+        speedText.setText("۰ از " + fmt(phrases.size()));
+
+        new Thread(() -> {
+            try {
+                StringBuilder report = new StringBuilder();
+                report.append("آدرس هدف: ").append(target).append("\n\n");
+                int matches = 0;
+
+                for (int i = 0; i < phrases.size(); i++) {
+                    if (scanCancelled) break;
+                    final int idx = i;
+
+                    runOnUiThread(() -> {
+                        statusText.setText("بررسی عبارت " + (idx + 1) + " از " + phrases.size());
+                        speedText.setText(fmt(idx + 1) + " از " + fmt(phrases.size()));
+                    });
+
+                    String phrase = normalize(phrases.get(i));
+                    String matchInfo = findEthMatch(phrase, targetLower);
+
+                    if (matchInfo != null) {
+                        matches++;
+                        report.append("عبارت ").append(i + 1)
+                              .append(" → ✅ تطبیق: ").append(matchInfo).append("\n");
+                    } else {
+                        report.append("عبارت ").append(i + 1)
+                              .append(" → ❌ بدون تطبیق\n");
+                    }
+
+                    final String partial = report.toString();
+                    runOnUiThread(() -> {
+                        outputText.setText(partial);
+                        outputScroll.post(() -> outputScroll.fullScroll(View.FOCUS_DOWN));
+                    });
+                }
+
+                final int finalMatches = matches;
+                final String finalReport = report.toString();
+                runOnUiThread(() -> {
+                    outputText.setText(finalReport
+                            + "\nنتیجه: " + (scanCancelled ? "متوقف شد" : "پایان یافت")
+                            + " — تعداد تطبیق: " + finalMatches);
+                    statusText.setText(scanCancelled ? "تطبیق متوقف شد." : "تطبیق تمام شد.");
+                    speedText.setText(" ");
+                    finishPublicAddressOperation();
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    outputText.append("\nخطا: " + (e.getMessage() == null ? e.toString() : e.getMessage()));
+                    statusText.setText(scanCancelled ? "تطبیق متوقف شد." : "خطا در تطبیق");
+                    speedText.setText(" ");
+                    finishPublicAddressOperation();
+                });
+            }
+        }).start();
+    }
+
+    // اشتقاق آدرس‌های ETH با مسیر BIP44 و مقایسه با آدرس هدف
+    private String findEthMatch(String mnemonic, String targetLower) {
+        try {
+            byte[] seed = MnemonicUtils.generateSeed(mnemonic, "");
+            Bip32ECKeyPair master = Bip32ECKeyPair.generateKeyPair(seed);
+            for (int i = 0; i < 20; i++) {
+                int[] path = new int[]{
+                        44 | Bip32ECKeyPair.HARDENED_BIT,
+                        60 | Bip32ECKeyPair.HARDENED_BIT,
+                        0  | Bip32ECKeyPair.HARDENED_BIT,
+                        0,
+                        i
+                };
+                Bip32ECKeyPair child = Bip32ECKeyPair.deriveKeyPair(master, path);
+                String addr = "0x" + Keys.getAddress(child);
+                if (addr.toLowerCase(Locale.ROOT).equals(targetLower)) {
+                    return "m/44'/60'/0'/0/" + i + " → " + addr;
+                }
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private void finishPublicAddressOperation() {
