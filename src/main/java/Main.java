@@ -15,9 +15,11 @@ public class Main {
             .readTimeout(360, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build();
-    private static final int MAX_FILES = 100;
-    private static final long MAX_FILE_BYTES = 90_000;
-    private static final long MAX_CONTEXT_BYTES = 1_200_000;
+    // Keep the model context bounded: asking for complete file replacements from a huge
+    // repository snapshot can exhaust Gemini's output-token budget and abort the build.
+    private static final int MAX_FILES = 18;
+    private static final long MAX_FILE_BYTES = 45_000;
+    private static final long MAX_CONTEXT_BYTES = 260_000;
 
     public static void main(String[] args) throws Exception {
         String token = env("GITHUB_TOKEN");
@@ -164,9 +166,23 @@ public class Main {
         List<String> result = new ArrayList<>();
         for (String path : new String(bytes, StandardCharsets.UTF_8).split("\\u0000")) {
             if (isReadablePath(path)) result.add(path);
-            if (result.size() >= MAX_FILES) break;
         }
+        // Prefer implementation and build files over documentation and ancillary files.
+        result.sort(Comparator.comparingInt(Main::filePriority).thenComparing(String::compareTo));
+        if (result.size() > MAX_FILES) return new ArrayList<>(result.subList(0, MAX_FILES));
         return result;
+    }
+
+    private static int filePriority(String path) {
+        if (path.startsWith("app/src/main/java/") || path.startsWith("robat2app/src/main/java/")
+                || path.startsWith("src/main/java/")) return 0;
+        if (path.startsWith("app/src/main/res/") || path.startsWith("robat2app/src/main/res/")) return 1;
+        if (path.equals("app/build.gradle") || path.equals("robat2app/build.gradle")
+                || path.equals("settings.gradle") || path.equals("build.gradle")
+                || path.equals("pom.xml")) return 2;
+        if (path.endsWith("AndroidManifest.xml") || path.endsWith(".properties")) return 3;
+        if (path.startsWith(".github/workflows/")) return 5;
+        return 4;
     }
 
     private static boolean isReadablePath(String path) {
@@ -211,7 +227,7 @@ public class Main {
         }
         String prompt = """
                 You are an autonomous senior software engineer working on the user's repository.
-                Understand the whole supplied project before editing. The user may request new features,
+                Understand the supplied implementation and build files before editing. The user may request new features,
                 UI redesign, bug fixes, refactoring, integrations, performance improvements, or other
                 reasonable code changes. Plan internally, then implement the requested result across
                 every necessary file. Do not merely explain or provide snippets.
@@ -238,7 +254,7 @@ public class Main {
         JsonObject content = new JsonObject(); content.add("parts", parts);
         JsonArray contents = new JsonArray(); contents.add(content);
         JsonObject config = new JsonObject();
-        config.addProperty("maxOutputTokens", 24000);
+        config.addProperty("maxOutputTokens", 12000);
         config.addProperty("responseMimeType", "application/json");
         JsonObject body = new JsonObject();
         body.add("contents", contents); body.add("generationConfig", config);
