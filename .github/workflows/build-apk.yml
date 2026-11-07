@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - feature/robat2-android-app
+      - feature/robat2-full-audit-v2
   pull_request:
     branches:
       - main
@@ -28,6 +29,10 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
+      - name: Compile Robat2 AI engine
+        run: mvn -B -q package
+      - name: Run Gradle unit tests
+        run: gradle test
       - name: Build APKs
         run: gradle assembleDebug
       - name: Verify APKs
@@ -49,7 +54,7 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Publish APK downloads
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/robat2-full-audit-v2'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-build-${{ github.run_number }}
