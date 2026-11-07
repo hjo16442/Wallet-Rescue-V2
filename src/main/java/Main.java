@@ -149,7 +149,6 @@ public class Main {
             try {
                 run(targetDir, "git", "diff", "--check");
                 validateProject(targetDir);
-                break;
             } catch (Exception validationError) {
                 if (repairAttempt >= 2) {
                     throw new IllegalStateException("پس از ۳ دور پیاده‌سازی/اصلاح، تست پروژه همچنان ناموفق بود. آخرین خطا: "
@@ -170,7 +169,31 @@ public class Main {
                             + validationError.getMessage());
                 if (edits.size() > 12)
                     throw new IllegalStateException("تعداد فایل‌های اصلاحی بیش از حد مجاز است.");
+                continue;
             }
+
+            // Independent post-build review: ask the model to inspect the actual updated
+            // project again and fix only concrete defects before any commit is pushed.
+            JsonObject review = askForProjectEdits(project,
+                    "بازبینی مستقل نهایی انجام بده. درخواست اصلی کاربر: " + requestText
+                    + "\\nتست Maven و ساخت Android با موفقیت انجام شده‌اند. تمام فایل‌های فعلی را دوباره بررسی کن. "
+                    + "فقط اگر ایراد واقعی در منطق، امنیت، سازگاری، یا برآورده‌نشدن درخواست وجود دارد، آن را اصلاح کن. "
+                    + "تغییر سلیقه‌ای، قالب‌بندی، بازنویسی غیرضروری یا قابلیت جدید اضافه نکن. "
+                    + "اگر ایراد واقعی پیدا نکردی edits را خالی برگردان. خلاصه فارسی باشد.",
+                    geminiKey, model);
+            JsonArray reviewEdits = review.getAsJsonArray("edits");
+            if (reviewEdits != null && !reviewEdits.isEmpty()) {
+                if (repairAttempt >= 2)
+                    throw new IllegalStateException("بازبینی مستقل هنوز تغییرات اصلاحی پیشنهاد می‌دهد؛ برای جلوگیری از چرخه بی‌پایان، commit متوقف شد.");
+                if (reviewEdits.size() > 12)
+                    throw new IllegalStateException("تعداد فایل‌های اصلاحی بازبینی مستقل بیش از حد مجاز است.");
+                repairAttempt++;
+                answer = review;
+                edits = reviewEdits;
+                pull.comment("🔍 بازبینی مستقل یک ایراد واقعی پیدا کرد؛ اصلاح آن انجام و دوباره تست می‌شود...");
+                continue;
+            }
+            break;
         }
 
         run(targetDir, "git", "config", "user.name", "Robat2 AI Developer");
@@ -186,9 +209,22 @@ public class Main {
         pull.comment("## ✅ تغییرات درخواستی پیاده‌سازی شد\n\n"
                 + "**درخواست:** " + requestText + "\n\n"
                 + "**خلاصه:** " + answer.get("summary").getAsString() + "\n\n"
+                + formatPlan(answer.getAsJsonArray("plan"))
                 + "**فایل‌های تغییرکرده:**\n" + fileList
                 + "\nتست پروژه موفق بود و تغییرات روی شاخه همین PR ثبت شد. "
                 + "قبل از ادغام، تغییرات را بازبینی کنید؛ ربات PR را خودکار ادغام نمی‌کند.");
+    }
+
+    private static String formatPlan(JsonArray plan) {
+        if (plan == null || plan.isEmpty()) return "";
+        StringBuilder out = new StringBuilder("**مراحل اجرا:**\\n");
+        int limit = Math.min(plan.size(), 8);
+        for (int i = 0; i < limit; i++) {
+            JsonElement step = plan.get(i);
+            if (step != null && step.isJsonPrimitive())
+                out.append(i + 1).append(". ").append(step.getAsString()).append("\\n");
+        }
+        return out.append("\\n").toString();
     }
 
     private static List<String> listProjectFiles(Path root, String request) throws Exception {
@@ -338,7 +374,9 @@ public class Main {
                 a secret/permission not present, return no edits and explain the missing requirement.
                 Existing files may only be edited when their full contents were supplied. You may also create new source, resource, or documentation files when needed, provided their paths pass the repository path allowlist. Do not delete files.
                 Return ONLY valid JSON with this exact shape:
-                {"summary":"short Persian explanation of implemented work","edits":[{"path":"relative/path","content":"complete full file content"}]}
+                {"summary":"short Persian explanation of implemented work","plan":["ordered implementation step"],"edits":[{"path":"relative/path","content":"complete full file content"}]}
+                Before editing, decompose the request into concrete ordered steps and preserve each user requirement.
+                The plan must contain 2-8 concise Persian steps. Implement every feasible step, not just the easiest one.
                 The edits array may be empty if no safe, meaningful implementation is possible. Prefer focused patches and avoid unrelated changes.
                 Do not use markdown fences. Escape JSON strings correctly.
                 
