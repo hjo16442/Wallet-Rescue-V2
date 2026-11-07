@@ -240,8 +240,7 @@ public class Main {
                     if (!trustedHuman || login.equals("github-actions[bot]")) continue;
                     if (!body.trim().matches("(?is)^/(?:fix|audit)\\b.*")) continue;
                     if (body.length() > 1400) body = body.substring(0, 1400) + " …[متن کوتاه شد]";
-                    String entry = (projectBot ? "گزارش Robat2" : "درخواست همکار مجاز (" + login + ")")
-                            + ":\n" + body;
+                    String entry = "درخواست همکار مجاز (" + login + "):\n" + body;
                     if (totalChars + entry.length() > 7000) break;
                     selected.add(entry);
                     totalChars += entry.length();
