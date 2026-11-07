@@ -43,8 +43,8 @@ public class Main {
         // /audit alone is read-only. If the user adds a task after /audit, treat it as an edit request
         // instead of silently discarding the requested work.
         boolean auditMode = normalizedCommand.equals("/audit");
-        boolean fixMode = normalizedCommand.equals("/fix") || normalizedCommand.startsWith("/fix ")
-                || normalizedCommand.startsWith("/audit ");
+        boolean fixMode = normalizedCommand.matches("(?s)^/fix(?:\\s.*)?$")
+                || normalizedCommand.matches("(?s)^/audit(?:\\s.*)?$");
         if (!auditMode && !fixMode) return;
         String requestText = commentBody.replaceFirst("(?is)^/(?:fix|audit)\\s*", "").trim();
 
