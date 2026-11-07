@@ -17,9 +17,9 @@ public class Main {
             .build();
     // Keep the model context bounded: asking for complete file replacements from a huge
     // repository snapshot can exhaust Gemini's output-token budget and abort the build.
-    private static final int MAX_FILES = 18;
-    private static final long MAX_FILE_BYTES = 45_000;
-    private static final long MAX_CONTEXT_BYTES = 260_000;
+    private static final int MAX_FILES = 60;
+    private static final long MAX_FILE_BYTES = 100_000;
+    private static final long MAX_CONTEXT_BYTES = 900_000;
 
     public static void main(String[] args) throws Exception {
         String token = env("GITHUB_TOKEN");
@@ -122,30 +122,56 @@ public class Main {
         if (edits.size() > 12) throw new IllegalStateException("تعداد فایل‌های خروجی بیش از حد مجاز است.");
 
         List<String> changed = new ArrayList<>();
-        for (JsonElement element : edits) {
-            JsonObject edit = element.getAsJsonObject();
-            String path = edit.get("path").getAsString();
-            String content = edit.get("content").getAsString();
-            if (!isAllowedPath(path)) throw new IllegalStateException("مسیر فایل غیرمجاز در خروجی AI: " + path);
-            Path destination = safeResolve(targetDir, path);
-            if (content.getBytes(StandardCharsets.UTF_8).length > MAX_FILE_BYTES)
-                throw new IllegalStateException("فایل خروجی بیش از حد مجاز است: " + path);
-            if (Files.exists(destination) && !project.containsKey(path))
-                throw new IllegalStateException("AI تلاش کرد فایل خارج از محدوده بررسی را تغییر دهد: " + path);
-            if (project.containsKey(path) && project.get(path).equals(content)) continue;
-            Files.createDirectories(destination.getParent());
-            Files.writeString(destination, content, StandardCharsets.UTF_8);
-            changed.add(path);
-        }
+        int repairAttempt = 0;
+        while (true) {
+            for (JsonElement element : edits) {
+                JsonObject edit = element.getAsJsonObject();
+                String path = edit.get("path").getAsString();
+                String content = edit.get("content").getAsString();
+                if (!isAllowedPath(path)) throw new IllegalStateException("مسیر فایل غیرمجاز در خروجی AI: " + path);
+                Path destination = safeResolve(targetDir, path);
+                if (content.getBytes(StandardCharsets.UTF_8).length > MAX_FILE_BYTES)
+                    throw new IllegalStateException("فایل خروجی بیش از حد مجاز است: " + path);
+                if (Files.exists(destination) && !project.containsKey(path))
+                    throw new IllegalStateException("AI تلاش کرد فایل خارج از محدوده بررسی را تغییر دهد: " + path);
+                if (project.containsKey(path) && project.get(path).equals(content)) continue;
+                Files.createDirectories(destination.getParent());
+                Files.writeString(destination, content, StandardCharsets.UTF_8);
+                project.put(path, content);
+                if (!changed.contains(path)) changed.add(path);
+            }
 
-        if (changed.isEmpty()) {
-            pull.comment("ℹ️ هوش مصنوعی تغییری متفاوت از کد فعلی تولید نکرد؛ چیزی ثبت نشد.");
-            return;
-        }
+            if (changed.isEmpty()) {
+                pull.comment("ℹ️ هوش مصنوعی تغییری متفاوت از کد فعلی تولید نکرد؛ چیزی ثبت نشد.");
+                return;
+            }
 
-        List<String> diffCheck = new ArrayList<>(Arrays.asList("git", "diff", "--check"));
-        run(targetDir, diffCheck.toArray(new String[0]));
-        validateProject(targetDir);
+            try {
+                run(targetDir, "git", "diff", "--check");
+                validateProject(targetDir);
+                break;
+            } catch (Exception validationError) {
+                if (repairAttempt >= 2) {
+                    throw new IllegalStateException("پس از ۳ دور پیاده‌سازی/اصلاح، تست پروژه همچنان ناموفق بود. آخرین خطا: "
+                            + validationError.getMessage(), validationError);
+                }
+                repairAttempt++;
+                pull.comment("🛠️ مرحله " + (repairAttempt + 1)
+                        + ": تست یا ساخت ناموفق شد؛ Robat2 خطا را تحلیل می‌کند و اصلاح مجدد انجام می‌دهد...");
+                String repairPrompt = "درخواست اصلی کاربر: " + requestText
+                        + "\\n\\nتلاش قبلی کد را تغییر داد اما تست/ساخت شکست خورد. "
+                        + "خطای واقعی ابزار: \\n" + validationError.getMessage()
+                        + "\\n\\nفایل‌های فعلی پروژه را اصلاح کن تا خطا برطرف شود. "
+                        + "تغییرات موفق قبلی را حفظ کن، فقط فایل‌های لازم را اصلاح کن و تست‌ها را خراب نکن.";
+                answer = askForProjectEdits(project, repairPrompt, geminiKey, model);
+                edits = answer.getAsJsonArray("edits");
+                if (edits == null || edits.isEmpty())
+                    throw new IllegalStateException("هوش مصنوعی برای اصلاح خطای تست، تغییر معتبری ارائه نکرد: "
+                            + validationError.getMessage());
+                if (edits.size() > 12)
+                    throw new IllegalStateException("تعداد فایل‌های اصلاحی بیش از حد مجاز است.");
+            }
+        }
 
         run(targetDir, "git", "config", "user.name", "Robat2 AI Developer");
         run(targetDir, "git", "config", "user.email", "robat2-ai@users.noreply.github.com");
@@ -249,7 +275,7 @@ public class Main {
                 Existing files may only be edited when their full contents were supplied. You may also create new source, resource, or documentation files when needed, provided their paths pass the repository path allowlist. Do not delete files.
                 Return ONLY valid JSON with this exact shape:
                 {"summary":"short Persian explanation of implemented work","edits":[{"path":"relative/path","content":"complete full file content"}]}
-                The edits array may be empty if no safe, meaningful implementation is possible.
+                The edits array may be empty if no safe, meaningful implementation is possible. Prefer focused patches and avoid unrelated changes.
                 Do not use markdown fences. Escape JSON strings correctly.
                 
                 USER REQUEST:
@@ -379,9 +405,16 @@ public class Main {
     }
 
     private static void run(Path dir, String... command) throws Exception {
-        Process p = new ProcessBuilder(command).directory(dir.toFile()).inheritIO().start();
-        if (p.waitFor() != 0)
-            throw new IllegalStateException("دستور ناموفق بود: " + String.join(" ", command)
-                    + "؛ هیچ commit/push انجام نشد.");
+        Process p = new ProcessBuilder(command).directory(dir.toFile()).redirectErrorStream(true).start();
+        byte[] outputBytes = p.getInputStream().readAllBytes();
+        int exitCode = p.waitFor();
+        String output = new String(outputBytes, StandardCharsets.UTF_8);
+        if (!output.isBlank()) System.out.print(output);
+        if (exitCode != 0) {
+            String tail = output.length() > 9000 ? output.substring(output.length() - 9000) : output;
+            throw new IllegalStateException("دستور ناموفق بود (کد " + exitCode + "): "
+                    + String.join(" ", command) + "\\n" + tail
+                    + "\\nهیچ commit/push انجام نشد.");
+        }
     }
 }
