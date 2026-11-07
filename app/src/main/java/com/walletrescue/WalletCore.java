@@ -63,8 +63,8 @@ public final class WalletCore {
         byte[] pub=k.getPubKeyPoint().getEncoded(false);
         byte[] hash=keccak(Arrays.copyOfRange(pub,1,pub.length));
         byte[] payload=new byte[21];payload[0]=0x41;System.arraycopy(hash,12,payload,1,20);
-        byte[] first=org.bitcoinj.core.Utils.sha256hash(payload);
-        byte[] second=org.bitcoinj.core.Utils.sha256hash(first);
+        byte[] first=org.bitcoinj.core.Utils.sha256hash(payload).getBytes();
+        byte[] second=org.bitcoinj.core.Utils.sha256hash(first).getBytes();
         byte[] check=Arrays.copyOf(second,4);
         byte[] full=Arrays.copyOf(payload,25);System.arraycopy(check,0,full,21,4);
         return org.bitcoinj.core.Base58.encode(full);
