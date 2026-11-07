@@ -17,7 +17,7 @@ public class Main {
             .build();
     // Keep the model context bounded: asking for complete file replacements from a huge
     // repository snapshot can exhaust Gemini's output-token budget and abort the build.
-    private static final int MAX_FILES = 32;
+    private static final int MAX_FILES = 48;
     private static final long MAX_FILE_BYTES = 100_000;
     private static final long MAX_CONTEXT_BYTES = 320_000;
 
@@ -49,6 +49,13 @@ public class Main {
                 || normalizedCommand.matches("(?s)^/audit(?:\\s.*)?$");
         if (!auditMode && !fixMode) return;
         String requestText = commentBody.replaceFirst("(?is)^/(?:fix|audit)\\s*", "").trim();
+        int autonomyLevel = 2;
+        java.util.regex.Matcher levelMatcher = java.util.regex.Pattern
+                .compile("(?i)^\\[LEVEL:([123])\\]\\s*").matcher(requestText);
+        if (levelMatcher.find()) {
+            autonomyLevel = Integer.parseInt(levelMatcher.group(1));
+            requestText = requestText.substring(levelMatcher.end()).trim();
+        }
 
         GitHub github = new GitHubBuilder().withOAuthToken(token).build();
         GHRepository repo = github.getRepository(repoFull);
@@ -70,6 +77,16 @@ public class Main {
             if (!history.isBlank())
                 modelRequest = "زمینه گفت‌وگوی اخیر همین پروژه (برای حفظ پیوستگی؛ دستور فعلی اولویت دارد):\n"
                         + history + "\n\nدرخواست فعلی کاربر که باید اجرا شود:\n" + requestText;
+        }
+
+        if (!auditMode) {
+            String profile = switch (autonomyLevel) {
+                case 1 -> "سطح ۱ - ربات حرفه‌ای: درخواست را دقیق اجرا کن، فایل‌های مرتبط را پیدا کن، تغییر محدود و امن بده، تست و ساخت را اجرا کن و نتیجه واقعی را گزارش کن.";
+                case 2 -> "سطح ۲ - مهندس خودکار: زمینه مرتبط مخزن و وابستگی‌ها را تحلیل کن، تغییرات چندفایلی هماهنگ بده، کنترل‌های امنیتی و تست‌ها را اجرا کن، خطاهای واقعی را حداکثر دو دور اصلاح کن و فقط نتیجه تأییدشده را گزارش کن.";
+                default -> "سطح ۳ - دستیار توسعه مستقل: هدف را به مراحل طراحی، پیاده‌سازی، تست، اصلاح، مستندسازی و آماده‌سازی انتشار تقسیم کن؛ همه مراحل ممکن در همین مخزن و مجوزهای موجود را انجام بده، وابستگی‌ها و اثرات جانبی را بررسی کن، نتیجه هر مرحله را اعتبارسنجی کن و موارد نیازمند کلید، هزینه، دسترسی بیرونی یا تأیید انسانی را متوقف و شفاف اعلام کن. عملیات حساس یا انتشار بیرونی بدون تأیید صریح ممنوع است.";
+            };
+            modelRequest = "پروفایل اجرای انتخاب‌شده:\\n" + profile
+                    + "\\n\\nدستور کاربر:\\n" + modelRequest;
         }
         // Build-only mode lets a maintainer rerun Android packaging after a code fix
         // without asking Gemini to generate another full-project patch.
@@ -130,7 +147,7 @@ public class Main {
                     + answer.get("summary").getAsString() + "\n\n" + formatPlan(answer.getAsJsonArray("plan")));
             return;
         }
-        if (edits.size() > 12) throw new IllegalStateException("تعداد فایل‌های خروجی بیش از حد مجاز است.");
+        if (edits.size() > 6) throw new IllegalStateException("تعداد فایل‌های خروجی بیش از حد مجاز است (حداکثر ۶ فایل در هر مرحله).");
 
         List<String> changed = new ArrayList<>();
         int repairAttempt = 0;
@@ -178,8 +195,8 @@ public class Main {
                 if (edits == null || edits.isEmpty())
                     throw new IllegalStateException("هوش مصنوعی برای اصلاح خطای تست، تغییر معتبری ارائه نکرد: "
                             + validationError.getMessage());
-                if (edits.size() > 12)
-                    throw new IllegalStateException("تعداد فایل‌های اصلاحی بیش از حد مجاز است.");
+                if (edits.size() > 6)
+                    throw new IllegalStateException("تعداد فایل‌های اصلاحی بیش از حد مجاز است (حداکثر ۶ فایل در هر مرحله).");
                 continue;
             }
 
@@ -456,6 +473,12 @@ public class Main {
         }
         String prompt = """
                 You are an autonomous senior software engineer working on the user's repository.
+                Execution profiles are supplied in USER REQUEST: Level 1 means focused implementation and validation;
+                Level 2 means repository-aware multi-file engineering, security checks, and bounded repair retries;
+                Level 3 means end-to-end planning, implementation, testing, documentation, release preparation, and
+                explicit reporting of blocked steps. Higher levels increase planning and verification, never permissions.
+                Never deploy externally, spend money, access unrelated accounts, expose secrets, or perform irreversible
+                or security-sensitive actions without explicit human approval.
                 Understand the supplied implementation and build files before editing. The user may request new features,
                 UI redesign, bug fixes, refactoring, integrations, performance improvements, or other
                 reasonable code changes. Plan internally, then implement the requested result across
