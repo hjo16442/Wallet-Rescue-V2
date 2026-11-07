@@ -194,9 +194,15 @@ public class MainActivity extends Activity {
 
     private String waitForAgentReply(String repository, int number, String secret, long requestId) {
         long lastSeenId = requestId;
-        for (int attempt = 0; attempt < 24; attempt++) {
+        for (int attempt = 0; attempt < 60; attempt++) {
             try {
-                Thread.sleep(5000L);
+                // Allow longer AI edits/builds to finish: poll quickly at first, then
+                // reduce API traffic while waiting for the workflow's final PR comment.
+                Thread.sleep(attempt < 12 ? 5000L : 15000L);
+                if (attempt == 11) runOnUiThread(() ->
+                        status.setText("اجرای Robat2 بیشتر طول کشیده؛ همچنان منتظر نتیجه نهایی هستم..."));
+                if (attempt == 35) runOnUiThread(() ->
+                        status.setText("هنوز منتظر پایان تحلیل، اصلاح و ساخت پروژه هستم..."));
                 HttpURLConnection c = null;
                 try {
                     String endpoint = "https://api.github.com/repos/" + repository
