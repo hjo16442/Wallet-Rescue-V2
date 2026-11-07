@@ -114,7 +114,7 @@ jobs:
               details,
               '</pre>',
               '</details>'
-            ].join('\\n');
+            ].join('\n');
             await github.rest.issues.createComment({ ...context.repo, issue_number, body });
 
       - name: Summarize AI result without failing APK build
