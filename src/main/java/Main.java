@@ -203,8 +203,30 @@ public class Main {
         // This prevents the fixed file limit from hiding the most relevant module in large repos.
         result.sort(Comparator.comparingInt((String path) -> relevanceScore(path, request)).reversed()
                 .thenComparingInt(Main::filePriority).thenComparing(String::compareTo));
-        if (result.size() > MAX_FILES) return new ArrayList<>(result.subList(0, MAX_FILES));
+        if (result.size() > MAX_FILES) {
+            List<String> selected = new ArrayList<>();
+            // Always retain project entry points and build configuration, even when many
+            // request-matching files would otherwise crowd them out of the context window.
+            for (String path : result) {
+                if (isEssentialContextFile(path)) selected.add(path);
+            }
+            for (String path : result) {
+                if (selected.size() >= MAX_FILES) break;
+                if (!selected.contains(path)) selected.add(path);
+            }
+            return selected;
+        }
         return result;
+    }
+
+    private static boolean isEssentialContextFile(String path) {
+        String name = path.toLowerCase(Locale.ROOT);
+        return name.equals("pom.xml") || name.equals("build.gradle")
+                || name.equals("build.gradle.kts") || name.equals("settings.gradle")
+                || name.equals("settings.gradle.kts") || name.equals("gradle.properties")
+                || name.equals("readme.md") || name.equals("app/build.gradle")
+                || name.equals("robat2app/build.gradle")
+                || name.endsWith("/androidmanifest.xml");
     }
 
     private static int relevanceScore(String path, String request) {
