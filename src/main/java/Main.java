@@ -272,19 +272,20 @@ public class Main {
     }
 
     private static void validateProject(Path dir) throws Exception {
-        if (Files.isRegularFile(dir.resolve("mvnw")) || Files.isRegularFile(dir.resolve("pom.xml"))) {
-            run(dir, Files.isRegularFile(dir.resolve("mvnw")) ? "./mvnw" : "mvn", "-B", "test");
-            return;
+        boolean validated = false;
+        if (Files.isRegularFile(dir.resolve("pom.xml"))) {
+            run(dir, "mvn", "-B", "test");
+            validated = true;
         }
         if (Files.isRegularFile(dir.resolve("gradlew"))) {
-            run(dir, "./gradlew", "--no-daemon", "test");
-            return;
+            run(dir, "./gradlew", "--no-daemon", "assembleDebug");
+            validated = true;
+        } else if (Files.isRegularFile(dir.resolve("build.gradle")) || Files.isRegularFile(dir.resolve("build.gradle.kts"))) {
+            run(dir, "gradle", "--no-daemon", "assembleDebug");
+            validated = true;
         }
-        if (Files.isRegularFile(dir.resolve("build.gradle")) || Files.isRegularFile(dir.resolve("build.gradle.kts"))) {
-            run(dir, "gradle", "--no-daemon", "test");
-            return;
-        }
-        throw new IllegalStateException("پروژه دستور تست شناخته‌شده Maven/Gradle ندارد؛ برای ایمنی هیچ تغییری ثبت نشد.");
+        if (!validated)
+            throw new IllegalStateException("پروژه دستور تست یا ساخت شناخته‌شده Maven/Gradle ندارد؛ هیچ commit/push انجام نشد.");
     }
 
     private static String env(String name) {
