@@ -269,29 +269,41 @@ public class Main {
                 .addHeader("x-goog-api-key", key)
                 .post(RequestBody.create(body.toString(), MediaType.parse("application/json")))
                 .build();
-        try (Response response = HTTP.newCall(request).execute()) {
-            String raw = response.body() == null ? "" : response.body().string();
-            if (!response.isSuccessful())
-                throw new IllegalStateException("خطای Gemini HTTP " + response.code() + ": " + raw);
-            JsonObject root = JsonParser.parseString(raw).getAsJsonObject();
-            JsonArray candidates = root.getAsJsonArray("candidates");
-            if (candidates == null || candidates.isEmpty())
-                throw new IllegalStateException("Gemini پاسخ قابل استفاده‌ای برنگرداند.");
-            JsonObject candidate = candidates.get(0).getAsJsonObject();
-            String finish = candidate.has("finishReason") ? candidate.get("finishReason").getAsString() : "";
-            if ("MAX_TOKENS".equals(finish))
-                throw new IllegalStateException("پاسخ AI ناقص شد؛ برای جلوگیری از ثبت کد ناقص، هیچ تغییری اعمال نشد.");
-            JsonArray responseParts = candidate.getAsJsonObject("content").getAsJsonArray("parts");
-            StringBuilder text = new StringBuilder();
-            for (JsonElement item : responseParts) if (item.getAsJsonObject().has("text"))
-                text.append(item.getAsJsonObject().get("text").getAsString());
-            JsonElement parsed = JsonParser.parseString(text.toString().trim());
-            if (!parsed.isJsonObject()) throw new IllegalStateException("ساختار JSON خروجی AI معتبر نیست.");
-            JsonObject result = parsed.getAsJsonObject();
-            if (!result.has("summary") || !result.has("edits"))
-                throw new IllegalStateException("پاسخ AI فیلدهای لازم را ندارد.");
-            return result;
+
+        for (int attempt = 1; attempt <= 5; attempt++) {
+            try (Response response = HTTP.newCall(request).execute()) {
+                String raw = response.body() == null ? "" : response.body().string();
+                if (!response.isSuccessful()) {
+                    int code = response.code();
+                    if ((code == 429 || code == 500 || code == 502 || code == 503 || code == 504)
+                            && attempt < 5) {
+                        System.err.println("Gemini HTTP " + code + "; retry " + attempt + "/5");
+                        Thread.sleep(2000L * attempt * attempt);
+                        continue;
+                    }
+                    throw new IllegalStateException("خطای Gemini HTTP " + code + ": " + raw);
+                }
+                JsonObject root = JsonParser.parseString(raw).getAsJsonObject();
+                JsonArray candidates = root.getAsJsonArray("candidates");
+                if (candidates == null || candidates.isEmpty())
+                    throw new IllegalStateException("Gemini پاسخ قابل استفاده‌ای برنگرداند.");
+                JsonObject candidate = candidates.get(0).getAsJsonObject();
+                String finish = candidate.has("finishReason") ? candidate.get("finishReason").getAsString() : "";
+                if ("MAX_TOKENS".equals(finish))
+                    throw new IllegalStateException("پاسخ AI ناقص شد؛ برای جلوگیری از ثبت کد ناقص، هیچ تغییری اعمال نشد.");
+                JsonArray responseParts = candidate.getAsJsonObject("content").getAsJsonArray("parts");
+                StringBuilder text = new StringBuilder();
+                for (JsonElement item : responseParts) if (item.getAsJsonObject().has("text"))
+                    text.append(item.getAsJsonObject().get("text").getAsString());
+                JsonElement parsed = JsonParser.parseString(text.toString().trim());
+                if (!parsed.isJsonObject()) throw new IllegalStateException("ساختار JSON خروجی AI معتبر نیست.");
+                JsonObject result = parsed.getAsJsonObject();
+                if (!result.has("summary") || !result.has("edits"))
+                    throw new IllegalStateException("پاسخ AI فیلدهای لازم را ندارد.");
+                return result;
+            }
         }
+        throw new IllegalStateException("سرویس هوش مصنوعی پس از ۵ تلاش پاسخ نداد؛ کمی بعد دوباره درخواست بدهید.");
     }
 
     private static void validateProject(Path dir) throws Exception {
