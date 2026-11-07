@@ -183,26 +183,9 @@ public class Main {
                 continue;
             }
 
-            // Independent post-build review: ask the model to inspect the actual updated
-            // project again and fix only concrete defects before any commit is pushed.
-            JsonObject review = askForProjectEdits(project,
-                    "بازبینی مستقل نهایی انجام بده. درخواست اصلی کاربر و زمینه مکالمه: " + modelRequest
-                    + "\\nتست Maven و ساخت Android با موفقیت انجام شده‌اند. تمام فایل‌های فعلی را دوباره بررسی کن. "
-                    + "فقط اگر ایراد واقعی در منطق، امنیت، سازگاری، یا برآورده‌نشدن درخواست وجود دارد، آن را اصلاح کن. "
-                    + "تغییر سلیقه‌ای، قالب‌بندی، بازنویسی غیرضروری یا قابلیت جدید اضافه نکن. "
-                    + "اگر ایراد واقعی پیدا نکردی edits را خالی برگردان. خلاصه فارسی باشد.",
-                    geminiKey, model);
-            JsonArray reviewEdits = review.getAsJsonArray("edits");
-            if (reviewEdits != null && !reviewEdits.isEmpty()) {
-                if (repairAttempt >= 2)
-                    throw new IllegalStateException("بازبینی مستقل هنوز تغییرات اصلاحی پیشنهاد می‌دهد؛ برای جلوگیری از چرخه بی‌پایان، commit متوقف شد.");
-                if (reviewEdits.size() > 12)
-                    throw new IllegalStateException("تعداد فایل‌های اصلاحی بازبینی مستقل بیش از حد مجاز است.");
-                repairAttempt++;
-                edits = reviewEdits;
-                pull.comment("🔍 بازبینی مستقل یک ایراد واقعی پیدا کرد؛ اصلاح آن انجام و دوباره تست می‌شود...");
-                continue;
-            }
+            // The patch has passed diff checks and project validation.
+            // Avoid a mandatory second Gemini request: only request another model
+            // response when a real build/test failure needs repair.
             break;
         }
 
@@ -252,8 +235,10 @@ public class Main {
                     String association = item.has("author_association")
                             ? item.get("author_association").getAsString() : "";
                     boolean trustedHuman = Set.of("OWNER", "MEMBER", "COLLABORATOR").contains(association);
-                    boolean projectBot = login.equals("github-actions[bot]");
-                    if (!trustedHuman && !projectBot) continue;
+                    // Carry forward only human-authored commands; bot logs and diagnostics
+                    // can pollute context with stale failures and duplicated prompts.
+                    if (!trustedHuman || login.equals("github-actions[bot]")) continue;
+                    if (!body.trim().matches("(?is)^/(?:fix|audit)\\b.*")) continue;
                     if (body.length() > 1400) body = body.substring(0, 1400) + " …[متن کوتاه شد]";
                     String entry = (projectBot ? "گزارش Robat2" : "درخواست همکار مجاز (" + login + ")")
                             + ":\n" + body;
@@ -490,7 +475,7 @@ public class Main {
                 {"summary":"short Persian explanation of implemented work","plan":["ordered implementation step"],"edits":[{"path":"relative/path","content":"complete full file content"}]}
                 Before editing, decompose the request into concrete ordered steps and preserve each user requirement.
                 The plan must contain 2-8 concise Persian steps. Implement every feasible step, not just the easiest one.
-                The edits array may be empty if no safe, meaningful implementation is possible. Prefer focused patches and avoid unrelated changes. Return no more than 6 edited files in one pass; prioritize files essential to the user's request and do not rewrite documentation or unrelated files just to fill the response. Keep each returned file complete but concise.
+                The edits array may be empty if no safe, meaningful implementation is possible. Prefer focused patches and avoid unrelated changes. Return no more than 6 edited files in one pass; prioritize files essential to the user's request and do not rewrite documentation or unrelated files just to fill the response. Keep each returned file complete but concise. Do not repeat the full request or source code in the summary.
                 Do not use markdown fences. Escape JSON strings correctly.
                 
                 USER REQUEST:
