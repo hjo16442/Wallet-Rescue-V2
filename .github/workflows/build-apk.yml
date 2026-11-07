@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - feature/robat2-android-app
+      - feature/robat2-full-audit-v2
   pull_request:
     branches:
       - main
