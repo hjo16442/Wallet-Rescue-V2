@@ -217,14 +217,14 @@ public class Main {
 
     private static String formatPlan(JsonArray plan) {
         if (plan == null || plan.isEmpty()) return "";
-        StringBuilder out = new StringBuilder("**مراحل اجرا:**\\n");
+        StringBuilder out = new StringBuilder("**مراحل اجرا:**\n");
         int limit = Math.min(plan.size(), 8);
         for (int i = 0; i < limit; i++) {
             JsonElement step = plan.get(i);
             if (step != null && step.isJsonPrimitive())
-                out.append(i + 1).append(". ").append(step.getAsString()).append("\\n");
+                out.append(i + 1).append(". ").append(step.getAsString()).append("\n");
         }
-        return out.append("\\n").toString();
+        return out.append("\n").toString();
     }
 
     private static List<String> listProjectFiles(Path root, String request) throws Exception {
