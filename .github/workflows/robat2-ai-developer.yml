@@ -108,4 +108,3 @@ jobs:
           else
             echo "✅ **Robat2 AI execution completed successfully.**" >> "$GITHUB_STEP_SUMMARY"
           fi
-          retention-days: 30
