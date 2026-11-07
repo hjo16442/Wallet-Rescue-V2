@@ -3,6 +3,7 @@ import okhttp3.*;
 import org.kohsuke.github.*;
 
 import java.io.FileReader;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
@@ -10,9 +11,10 @@ import java.util.concurrent.TimeUnit;
 
 public class Main {
     private static final OkHttpClient HTTP = new OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(240, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+             .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(360, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(390, TimeUnit.SECONDS)
             .build();
     private static final int MAX_FILES = 60;
     private static final long MAX_FILE_BYTES = 35_000;
@@ -270,13 +272,13 @@ public class Main {
                 .post(RequestBody.create(body.toString(), MediaType.parse("application/json")))
                 .build();
 
-        for (int attempt = 1; attempt <= 5; attempt++) {
-            try (Response response = HTTP.newCall(request).execute()) {
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            try (Response response = HTTP.newCall(request).execute()) { 
                 String raw = response.body() == null ? "" : response.body().string();
                 if (!response.isSuccessful()) {
                     int code = response.code();
                     if ((code == 429 || code == 500 || code == 502 || code == 503 || code == 504)
-                            && attempt < 5) {
+                            && attempt < 2) {
                         System.err.println("Gemini HTTP " + code + "; retry " + attempt + "/5");
                         Thread.sleep(2000L * attempt * attempt);
                         continue;
@@ -301,9 +303,16 @@ public class Main {
                 if (!result.has("summary") || !result.has("edits"))
                     throw new IllegalStateException("پاسخ AI فیلدهای لازم را ندارد.");
                 return result;
+            } catch (SocketTimeoutException timeout) {
+                System.err.println("Gemini read timeout on attempt " + attempt + "/2: " + timeout.getMessage());
+                if (attempt < 2) {
+                    Thread.sleep(10000L);
+                    continue;
+                }
+                throw new IllegalStateException("پاسخ Gemini پس از ۶ دقیقه تمام شد؛ دو بار تلاش انجام شد. برای جلوگیری از تغییر ناقص، هیچ کدی ثبت نشد. جزئیات: " + timeout.getMessage(), timeout);
             }
         }
-        throw new IllegalStateException("سرویس هوش مصنوعی پس از ۵ تلاش پاسخ نداد؛ کمی بعد دوباره درخواست بدهید.");
+        throw new IllegalStateException("سرویس هوش مصنوعی پس از ۲ تلاش پاسخ نداد؛ کمی بعد دوباره درخواست بدهید.");
     }
 
     private static void validateProject(Path dir) throws Exception {
