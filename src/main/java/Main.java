@@ -86,8 +86,15 @@ public class Main {
             JsonArray auditEdits = audit.getAsJsonArray("edits");
             if (auditEdits != null && !auditEdits.isEmpty())
                 throw new IllegalStateException("در حالت ممیزی، مدل تلاش کرد کد را تغییر دهد؛ تغییرات رد شد.");
+            String buildCheck;
+            try {
+                validateProject(targetDir);
+                buildCheck = "\\n\\n### نتیجه تست و ساخت\\n- تست Maven و ساخت APKهای اندروید با موفقیت انجام شد.";
+            } catch (Exception buildError) {
+                buildCheck = "\\n\\n### نتیجه تست و ساخت\\n- **نیازمند بررسی:** " + buildError.getMessage();
+            }
             pull.comment("## 🔎 گزارش بررسی کامل Wallet-Rescue-V2\\n\\n" + audit.get("summary").getAsString()
-                    + "\\n\\n_این گزارش بر اساس فایل‌های خوانده‌شده است؛ برای تأیید نهایی باید تست ساخت نیز اجرا شود._");
+                    + buildCheck + "\\n\\n_گزارش بر اساس فایل‌های مخزن و نتیجه اجرای تست/ساخت است؛ بازبینی انسانی قبل از ادغام لازم است._");
             return;
         }
         pull.comment("🤖 درخواست دریافت شد. در حال تحلیل پروژه و پیاده‌سازی تغییرات در چند فایل مرتبط هستم...");
