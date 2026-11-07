@@ -2,6 +2,7 @@ package com.walletrescue;
 
 import org.bitcoinj.core.Address;
 import org.bitcoinj.core.ECKey;
+import org.bitcoinj.script.ScriptType;
 import org.bitcoinj.core.NetworkParameters;
 import org.bitcoinj.params.MainNetParams;
 import org.bitcoinj.crypto.ChildNumber;
@@ -41,7 +42,7 @@ public final class WalletCore {
         DeterministicKey eth=derive(master,44,true,60,true,0,true,0,false,0,false);
         DeterministicKey tron=derive(master,44,true,195,true,0,true,0,false,0,false);
         NetworkParameters params=MainNetParams.get();
-        String btcAddr=Address.fromKey(params,ECKey.fromPrivate(btc.getPrivKeyBytes(),true)).toString();
+        String btcAddr=Address.fromKey(params,ECKey.fromPrivate(btc.getPrivKeyBytes(),true),ScriptType.P2PKH).toString();
         String ethAddr=evmAddress(eth.getPrivKeyBytes());
         String tronAddr=tronAddress(tron.getPrivKeyBytes());
         return new WalletResult(new ArrayList<>(words),btcAddr,ethAddr,tronAddr);
