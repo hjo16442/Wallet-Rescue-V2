@@ -11,12 +11,12 @@ import java.util.concurrent.TimeUnit;
 public class Main {
     private static final OkHttpClient HTTP = new OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(240, TimeUnit.SECONDS)
+            .readTimeout(360, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build();
-    private static final int MAX_FILES = 24;
-    private static final long MAX_FILE_BYTES = 35_000;
-    private static final long MAX_CONTEXT_BYTES = 420_000;
+    private static final int MAX_FILES = 100;
+    private static final long MAX_FILE_BYTES = 90_000;
+    private static final long MAX_CONTEXT_BYTES = 1_200_000;
 
     public static void main(String[] args) throws Exception {
         String token = env("GITHUB_TOKEN");
@@ -36,7 +36,9 @@ public class Main {
         String repoFull = repository.get("full_name").getAsString();
         int prNumber = issue.get("number").getAsInt();
         String commentBody = event.getAsJsonObject("comment").get("body").getAsString();
-        String requestText = commentBody.replaceFirst("(?is)^/fix\\s*", "").trim();
+        boolean auditMode = commentBody.trim().equalsIgnoreCase("/audit") || commentBody.trim().toLowerCase(Locale.ROOT).startsWith("/audit ");
+        if (!auditMode && !commentBody.trim().equalsIgnoreCase("/fix") && !commentBody.trim().toLowerCase(Locale.ROOT).startsWith("/fix ")) return;
+        String requestText = commentBody.replaceFirst("(?is)^/(?:fix|audit)\\s*", "").trim();
 
         GitHub github = new GitHubBuilder().withOAuthToken(token).build();
         GHRepository repo = github.getRepository(repoFull);
@@ -46,8 +48,8 @@ public class Main {
             pull.comment("⛔ برای امنیت، اصلاح خودکار فقط روی PRهای همین مخزن مجاز است.");
             return;
         }
-        if (requestText.isBlank()) {
-            pull.comment("✍️ لطفاً درخواست دقیق خود را بعد از دستور /fix بنویسید. مثال: /fix قابلیت ورود با اثر انگشت اضافه کن");
+        if (requestText.isBlank() && !auditMode) {
+            pull.comment("✍️ درخواست را بعد از /fix بنویسید؛ برای بررسی کامل پروژه فقط /audit را ارسال کنید.");
             return;
         }
 
@@ -76,7 +78,19 @@ public class Main {
             return;
         }
 
-        pull.comment("🤖 درخواست دریافت شد. در حال بررسی ساختار پروژه و طراحی تغییرات در چند فایل مرتبط هستم...");
+        if (auditMode) {
+            pull.comment("🔎 بررسی کامل مخزن آغاز شد؛ کدها، تنظیمات، امنیت، وابستگی‌ها و ساخت پروژه ارزیابی می‌شوند...");
+            JsonObject audit = askForProjectEdits(project,
+                    "فقط ممیزی و بررسی READ-ONLY انجام بده. هیچ فایل یا کدی را تغییر نده. تمام ایرادهای واقعی را با شدت، مسیر فایل، شرح دقیق و راهکار اصلاح فهرست کن. خلاصه را به فارسی و با قالب Markdown بنویس. edits باید حتماً آرایه خالی باشد.",
+                    geminiKey, model);
+            JsonArray auditEdits = audit.getAsJsonArray("edits");
+            if (auditEdits != null && !auditEdits.isEmpty())
+                throw new IllegalStateException("در حالت ممیزی، مدل تلاش کرد کد را تغییر دهد؛ تغییرات رد شد.");
+            pull.comment("## 🔎 گزارش بررسی کامل Wallet-Rescue-V2\\n\\n" + audit.get("summary").getAsString()
+                    + "\\n\\n_این گزارش بر اساس فایل‌های خوانده‌شده است؛ برای تأیید نهایی باید تست ساخت نیز اجرا شود._");
+            return;
+        }
+        pull.comment("🤖 درخواست دریافت شد. در حال تحلیل پروژه و پیاده‌سازی تغییرات در چند فایل مرتبط هستم...");
         JsonObject answer = askForProjectEdits(project, requestText, geminiKey, model);
         JsonArray edits = answer.getAsJsonArray("edits");
         if (edits == null || edits.isEmpty()) {
@@ -205,7 +219,7 @@ public class Main {
         JsonObject content = new JsonObject(); content.add("parts", parts);
         JsonArray contents = new JsonArray(); contents.add(content);
         JsonObject config = new JsonObject();
-        config.addProperty("maxOutputTokens", 60000);
+        config.addProperty("maxOutputTokens", 24000);
         config.addProperty("responseMimeType", "application/json");
         JsonObject body = new JsonObject();
         body.add("contents", contents); body.add("generationConfig", config);
