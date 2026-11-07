@@ -17,9 +17,9 @@ public class Main {
             .build();
     // Keep the model context bounded: asking for complete file replacements from a huge
     // repository snapshot can exhaust Gemini's output-token budget and abort the build.
-    private static final int MAX_FILES = 60;
+    private static final int MAX_FILES = 32;
     private static final long MAX_FILE_BYTES = 100_000;
-    private static final long MAX_CONTEXT_BYTES = 900_000;
+    private static final long MAX_CONTEXT_BYTES = 320_000;
 
     public static void main(String[] args) throws Exception {
         String token = env("GITHUB_TOKEN");
@@ -254,13 +254,13 @@ public class Main {
                     boolean trustedHuman = Set.of("OWNER", "MEMBER", "COLLABORATOR").contains(association);
                     boolean projectBot = login.equals("github-actions[bot]");
                     if (!trustedHuman && !projectBot) continue;
-                    if (body.length() > 2400) body = body.substring(0, 2400) + " …[متن کوتاه شد]";
+                    if (body.length() > 1400) body = body.substring(0, 1400) + " …[متن کوتاه شد]";
                     String entry = (projectBot ? "گزارش Robat2" : "درخواست همکار مجاز (" + login + ")")
                             + ":\n" + body;
-                    if (totalChars + entry.length() > 14000) break;
+                    if (totalChars + entry.length() > 7000) break;
                     selected.add(entry);
                     totalChars += entry.length();
-                    if (selected.size() >= 12) break;
+                    if (selected.size() >= 8) break;
                 }
                 Collections.reverse(selected);
                 return String.join("\n\n", selected);
@@ -490,7 +490,7 @@ public class Main {
                 {"summary":"short Persian explanation of implemented work","plan":["ordered implementation step"],"edits":[{"path":"relative/path","content":"complete full file content"}]}
                 Before editing, decompose the request into concrete ordered steps and preserve each user requirement.
                 The plan must contain 2-8 concise Persian steps. Implement every feasible step, not just the easiest one.
-                The edits array may be empty if no safe, meaningful implementation is possible. Prefer focused patches and avoid unrelated changes.
+                The edits array may be empty if no safe, meaningful implementation is possible. Prefer focused patches and avoid unrelated changes. Return no more than 6 edited files in one pass; prioritize files essential to the user's request and do not rewrite documentation or unrelated files just to fill the response. Keep each returned file complete but concise.
                 Do not use markdown fences. Escape JSON strings correctly.
                 
                 USER REQUEST:
@@ -501,7 +501,7 @@ public class Main {
         JsonObject content = new JsonObject(); content.add("parts", parts);
         JsonArray contents = new JsonArray(); contents.add(content);
         JsonObject config = new JsonObject();
-        config.addProperty("maxOutputTokens", 12000);
+        config.addProperty("maxOutputTokens", 32768);
         config.addProperty("responseMimeType", "application/json");
         JsonObject body = new JsonObject();
         body.add("contents", contents); body.add("generationConfig", config);
@@ -563,8 +563,11 @@ public class Main {
                 throw new IllegalStateException("Gemini پاسخ قابل استفاده‌ای برنگرداند.");
             JsonObject candidate = candidates.get(0).getAsJsonObject();
             String finish = candidate.has("finishReason") ? candidate.get("finishReason").getAsString() : "";
-            if ("MAX_TOKENS".equals(finish))
-                throw new IllegalStateException("پاسخ AI ناقص شد؛ برای جلوگیری از ثبت کد ناقص، هیچ تغییری اعمال نشد.");
+            if ("MAX_TOKENS".equals(finish)) {
+                String usage = root.has("usageMetadata") ? root.getAsJsonObject("usageMetadata").toString() : "اطلاعات مصرف توکن در دسترس نیست";
+                throw new IllegalStateException("پاسخ AI به سقف خروجی رسید (MAX_TOKENS)؛ هیچ فایل ناقصی ثبت نشد. جزئیات مصرف: " + usage
+                        + ". درخواست را به چند مرحله کوچک‌تر تقسیم کنید یا تعداد فایل‌های هدف را محدود کنید.");
+            }
             JsonArray responseParts = candidate.getAsJsonObject("content").getAsJsonArray("parts");
             StringBuilder text = new StringBuilder();
             for (JsonElement item : responseParts) if (item.getAsJsonObject().has("text"))
