@@ -87,6 +87,7 @@ public class Main {
         pull.comment("🤖 درخواست دریافت شد. در حال بررسی ساختار پروژه و طراحی تغییرات در چند فایل مرتبط هستم...");
         JsonObject answer = null;
         List<String> changed = new ArrayList<>();
+        Set<String> allChanged = new LinkedHashSet<>();
         String repairRequest = requestText;
         boolean validated = false;
         for (int attempt = 1; attempt <= 3; attempt++) {
@@ -116,7 +117,8 @@ public class Main {
                 changed.add(path);
             }
 
-            if (changed.isEmpty()) {
+            allChanged.addAll(changed);
+            if (allChanged.isEmpty()) {
                 pull.comment("ℹ️ هوش مصنوعی تغییری متفاوت از کد فعلی تولید نکرد؛ چیزی ثبت نشد.");
                 return;
             }
@@ -124,6 +126,8 @@ public class Main {
             try {
                 run(targetDir, "git", "diff", "--check");
                 validateProject(targetDir);
+                changed.clear();
+                changed.addAll(allChanged);
                 validated = true;
                 break;
             } catch (Exception failure) {
@@ -131,7 +135,7 @@ public class Main {
                     throw new IllegalStateException("پس از ۳ دور اصلاح، تست‌ها هنوز ناموفق‌اند؛ هیچ تغییری push نشد. آخرین خطا: "
                             + failure.getMessage(), failure);
                 }
-                for (String path : changed) {
+                for (String path : allChanged) {
                     Path edited = safeResolve(targetDir, path);
                     project.put(path, Files.readString(edited, StandardCharsets.UTF_8));
                 }
