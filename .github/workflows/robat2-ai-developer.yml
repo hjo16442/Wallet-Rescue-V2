@@ -55,7 +55,9 @@ jobs:
           GITHUB_EVENT_PATH: ${{ github.event_path }}
           TARGET_DIR: .
         id: ai
-        run: mvn -B -q exec:java -Dexec.mainClass="Main"
+        run: |
+          set -o pipefail
+          mvn -B -q exec:java -Dexec.mainClass="Main" 2>&1 | tee ../robat2-ai.log
         continue-on-error: true
 
       - name: Build Android APKs
@@ -91,12 +93,29 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const fs = require('fs');
             const issue_number = context.issue.number;
-            await github.rest.issues.createComment({
-              ...context.repo,
-              issue_number,
-              body: "⚠️ **اجرای هوش مصنوعی Robat2 ناموفق بود.** ساخت و بررسی APKها مستقل ادامه یافت. وضعیت سبز Workflow فقط موفقیت ساخت و بارگذاری را نشان می‌دهد و به معنی موفقیت درخواست AI نیست. جزئیات خطای AI را در مرحله Run AI Developer ببینید."
-            });
+            let details = 'فایل گزارش خطای AI در دسترس نیست.';
+            try {
+              const raw = fs.readFileSync('robat2-ai.log', 'utf8');
+              details = raw.slice(-7000)
+                .replace(/AIza[0-9A-Za-z_-]{20,}/g, '[REDACTED_API_KEY]')
+                .replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g, '[REDACTED_GITHUB_TOKEN]');
+              details = details.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            } catch (error) {
+              details = String(error.message || error);
+            }
+            const body = [
+              '⚠️ **اجرای هوش مصنوعی Robat2 ناموفق بود.** ساخت و بررسی APKها مستقل ادامه یافت. وضعیت سبز Workflow فقط موفقیت ساخت و بارگذاری را نشان می‌دهد و به معنی موفقیت درخواست AI نیست.',
+              '',
+              '<details><summary>نمایش جزئیات واقعی خطا</summary>',
+              '',
+              '<pre>',
+              details,
+              '</pre>',
+              '</details>'
+            ].join('\\n');
+            await github.rest.issues.createComment({ ...context.repo, issue_number, body });
 
       - name: Summarize AI result without failing APK build
         if: always()
