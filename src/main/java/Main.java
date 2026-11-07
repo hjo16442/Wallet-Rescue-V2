@@ -127,7 +127,7 @@ public class Main {
         JsonArray edits = answer.getAsJsonArray("edits");
         if (edits == null || edits.isEmpty()) {
             pull.comment("ℹ️ پس از بررسی پروژه، تغییر قابل اعمالی تولید نشد. توضیح: "
-                    + answer.get("summary").getAsString());
+                    + answer.get("summary").getAsString() + "\n\n" + formatPlan(answer.getAsJsonArray("plan")));
             return;
         }
         if (edits.size() > 12) throw new IllegalStateException("تعداد فایل‌های خروجی بیش از حد مجاز است.");
@@ -199,7 +199,6 @@ public class Main {
                 if (reviewEdits.size() > 12)
                     throw new IllegalStateException("تعداد فایل‌های اصلاحی بازبینی مستقل بیش از حد مجاز است.");
                 repairAttempt++;
-                answer = review;
                 edits = reviewEdits;
                 pull.comment("🔍 بازبینی مستقل یک ایراد واقعی پیدا کرد؛ اصلاح آن انجام و دوباره تست می‌شود...");
                 continue;
