@@ -18,7 +18,7 @@ import java.util.concurrent.Executors;
 public class MainActivity extends Activity {
     private EditText repo, token, request;
     private TextView status;
-    private Button send;
+    private Button send, audit;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
 
     @Override public void onCreate(Bundle state) {
@@ -46,8 +46,10 @@ public class MainActivity extends Activity {
         token = field(root,"توکن GitHub (Fine-grained PAT)","توکن را اینجا وارد کنید",true);
         request = field(root,"درخواست تغییر کد","مثلاً: فقط متن دکمه اصلی را فارسی کن",false);
         request.setMinLines(4); request.setGravity(48);
-        send = new Button(this); send.setText("ارسال درخواست به Robat2");
+        send = new Button(this); send.setText("اجرای درخواست و اصلاح کد");
         LinearLayout.LayoutParams bp=params(); bp.topMargin=dp(10); root.addView(send,bp);
+        audit = new Button(this); audit.setText("بررسی کامل پروژه و گزارش ایرادها");
+        LinearLayout.LayoutParams ap=params(); ap.topMargin=dp(6); root.addView(audit,ap);
         status = new TextView(this); status.setText("شماره PR به‌صورت خودکار از آخرین PR باز مخزن انتخاب می‌شود.");
         status.setTextSize(14); status.setTextColor(0xFF45546B);
         LinearLayout.LayoutParams st=params(); st.topMargin=dp(14); root.addView(status,st);
@@ -56,7 +58,8 @@ public class MainActivity extends Activity {
         note.setTextSize(12); note.setTextColor(0xFF68758A);
         LinearLayout.LayoutParams nt=params(); nt.topMargin=dp(20); root.addView(note,nt);
         setContentView(scroll);
-        send.setOnClickListener(v -> submit());
+        send.setOnClickListener(v -> submit(false));
+        audit.setOnClickListener(v -> submit(true));
     }
 
     private EditText field(LinearLayout parent,String label,String hint,boolean secret) {
@@ -92,12 +95,12 @@ public class MainActivity extends Activity {
         return c;
     }
 
-    private void submit(){
+    private void submit(boolean auditMode){
         final String repository=repo.getText().toString().trim();
         final String secret=token.getText().toString().trim();
         final String instruction=request.getText().toString().trim();
         if(!repository.matches("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")){status.setText("نام مخزن را دقیقاً به شکل owner/repository وارد کنید؛ مثال: hjo16442/Wallet-Rescue-V2");return;}
-        if(secret.isEmpty()||instruction.isEmpty()){status.setText("توکن و درخواست تغییر را وارد کنید.");return;}
+        if(secret.isEmpty()||(!auditMode && instruction.isEmpty())){status.setText("توکن را وارد کنید؛ برای اجرای درخواست، متن درخواست هم لازم است.");return;}
         send.setEnabled(false); status.setText("در حال پیدا کردن آخرین PR باز مخزن...");
         ((InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(request.getWindowToken(),0);
         worker.execute(()->{
@@ -121,13 +124,13 @@ public class MainActivity extends Activity {
                 c=openApi("https://api.github.com/repos/"+encodedRepo+"/issues/"+number+"/comments",secret);
                 c.setRequestMethod("POST"); c.setDoOutput(true);
                 c.setRequestProperty("Content-Type","application/json; charset=utf-8");
-                JSONObject body=new JSONObject(); body.put("body","/fix "+instruction);
+                JSONObject body=new JSONObject(); body.put("body", auditMode ? (instruction.isEmpty() ? "/audit" : "/audit "+instruction) : "/fix "+instruction);
                 byte[] data=body.toString().getBytes(StandardCharsets.UTF_8);
                 try(OutputStream os=c.getOutputStream()){os.write(data);}
                 int code=c.getResponseCode();
                 String response=readResponse(c);
                 String message;
-                if(code==201) message="درخواست با موفقیت در PR #"+number+" ثبت شد. اجرای Robat2 به فعال بودن GitHub Actions وابسته است.";
+                if(code==201) message=(auditMode ? "درخواست بررسی کامل" : "درخواست اصلاح کد")+" با موفقیت در PR #"+number+" ثبت شد. اجرای Robat2 به فعال بودن GitHub Actions وابسته است.";
                 else if(code==401||code==403) message="GitHub دسترسی را نپذیرفت (HTTP "+code+"). مجوز Issues: Write را بررسی کن.";
                 else if(code==404) message="PR یا مخزن پیدا نشد؛ نام مخزن را بررسی کن.";
                 else message="ارسال ناموفق بود (HTTP "+code+"): "+response.substring(0,Math.min(220,response.length()));
