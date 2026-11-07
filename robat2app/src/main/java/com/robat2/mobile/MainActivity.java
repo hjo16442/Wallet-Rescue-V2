@@ -17,6 +17,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private EditText repo, token, request;
+    private Spinner level;
     private TextView status;
     private Button send, audit;
     private LinearLayout messages;
@@ -49,7 +50,27 @@ public class MainActivity extends Activity {
         token = field(root,"توکن GitHub (Fine-grained PAT)","توکن را اینجا وارد کنید",true);
         request = field(root,"درخواست تغییر کد","مثلاً: فقط متن دکمه اصلی را فارسی کن",false);
         request.setMinLines(4); request.setGravity(48);
-        send = new Button(this); send.setText("اجرای درخواست و اصلاح کد");
+        TextView levelLabel = new TextView(this);
+        levelLabel.setText("سطح توانایی Robat2");
+        levelLabel.setTextColor(0xFF26364F);
+        levelLabel.setTextSize(14);
+        levelLabel.setTypeface(null, Typeface.BOLD);
+        LinearLayout.LayoutParams levelLabelParams = params();
+        levelLabelParams.topMargin = dp(12);
+        root.addView(levelLabel, levelLabelParams);
+        level = new Spinner(this);
+        String[] levels = {
+                "سطح ۱ - ربات حرفه‌ای",
+                "سطح ۲ - مهندس خودکار (پیشنهادی)",
+                "سطح ۳ - دستیار توسعه مستقل"
+        };
+        ArrayAdapter<String> levelAdapter = new ArrayAdapter<>(
+                this, android.R.layout.simple_spinner_item, levels);
+        levelAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        level.setAdapter(levelAdapter);
+        level.setSelection(1);
+        root.addView(level, params());
+        send = new Button(this); send.setText("اجرای درخواست در سطح انتخاب‌شده");
         LinearLayout.LayoutParams bp=params(); bp.topMargin=dp(10); root.addView(send,bp);
         audit = new Button(this); audit.setText("بررسی کامل پروژه و گزارش ایرادها");
         LinearLayout.LayoutParams ap=params(); ap.topMargin=dp(6); root.addView(audit,ap);
@@ -140,7 +161,7 @@ public class MainActivity extends Activity {
                 c=openApi("https://api.github.com/repos/"+encodedRepo+"/issues/"+number+"/comments",secret);
                 c.setRequestMethod("POST"); c.setDoOutput(true);
                 c.setRequestProperty("Content-Type","application/json; charset=utf-8");
-                JSONObject body=new JSONObject(); body.put("body", auditMode ? (instruction.isEmpty() ? "/audit" : "/audit "+instruction) : "/fix "+instruction);
+                JSONObject body=new JSONObject(); body.put("body", auditMode ? (instruction.isEmpty() ? "/audit" : "/audit "+instruction) : "/fix [LEVEL:"+(level.getSelectedItemPosition()+1)+"] "+instruction);
                 byte[] data=body.toString().getBytes(StandardCharsets.UTF_8);
                 try(OutputStream os=c.getOutputStream()){os.write(data);}
                 int code=c.getResponseCode();
