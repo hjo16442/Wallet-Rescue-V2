@@ -67,7 +67,7 @@ public class Main {
             return;
         }
 
-        List<String> paths = listProjectFiles(targetDir);
+        List<String> paths = listProjectFiles(targetDir, requestText);
         if (paths.isEmpty()) {
             pull.comment("⛔ فایل متنی قابل بررسی در پروژه پیدا نشد؛ هیچ تغییری اعمال نشد.");
             return;
@@ -191,7 +191,7 @@ public class Main {
                 + "قبل از ادغام، تغییرات را بازبینی کنید؛ ربات PR را خودکار ادغام نمی‌کند.");
     }
 
-    private static List<String> listProjectFiles(Path root) throws Exception {
+    private static List<String> listProjectFiles(Path root, String request) throws Exception {
         Process p = new ProcessBuilder("git", "ls-files", "-z").directory(root.toFile()).start();
         byte[] bytes = p.getInputStream().readAllBytes();
         if (p.waitFor() != 0) throw new IllegalStateException("خواندن فهرست فایل‌های پروژه ناموفق بود.");
@@ -199,10 +199,30 @@ public class Main {
         for (String path : new String(bytes, StandardCharsets.UTF_8).split("\\u0000")) {
             if (isReadablePath(path)) result.add(path);
         }
-        // Prefer implementation and build files over documentation and ancillary files.
-        result.sort(Comparator.comparingInt(Main::filePriority).thenComparing(String::compareTo));
+        // Rank files by both implementation importance and relevance to the user's request.
+        // This prevents the fixed file limit from hiding the most relevant module in large repos.
+        result.sort(Comparator.comparingInt((String path) -> relevanceScore(path, request)).reversed()
+                .thenComparingInt(Main::filePriority).thenComparing(String::compareTo));
         if (result.size() > MAX_FILES) return new ArrayList<>(result.subList(0, MAX_FILES));
         return result;
+    }
+
+    private static int relevanceScore(String path, String request) {
+        if (request == null || request.isBlank()) return 0;
+        String normalizedPath = path.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ");
+        String normalizedRequest = request.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ");
+        Set<String> stop = Set.of("the", "and", "for", "with", "from", "this", "that", "please",
+                "make", "add", "fix", "change", "into", "about", "project", "code");
+        int score = 0;
+        for (String token : normalizedRequest.split("\\s+")) {
+            if (token.length() < 3 || stop.contains(token)) continue;
+            if (normalizedPath.matches(".*\\b" + java.util.regex.Pattern.quote(token) + "\\b.*"))
+                score += 5;
+            else if (normalizedPath.contains(token)) score += 2;
+        }
+        if (path.startsWith("app/src/main/java/") || path.startsWith("robat2app/src/main/java/")
+                || path.startsWith("src/main/java/")) score += 2;
+        return score;
     }
 
     private static int filePriority(String path) {
