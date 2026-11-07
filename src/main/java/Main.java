@@ -546,9 +546,11 @@ public class Main {
             validated = true;
         }
         if (Files.isRegularFile(dir.resolve("gradlew"))) {
+            run(dir, "./gradlew", "--no-daemon", "test");
             run(dir, "./gradlew", "--no-daemon", "assembleDebug");
             validated = true;
         } else if (Files.isRegularFile(dir.resolve("build.gradle")) || Files.isRegularFile(dir.resolve("build.gradle.kts"))) {
+            run(dir, "gradle", "--no-daemon", "test");
             run(dir, "gradle", "--no-daemon", "assembleDebug");
             validated = true;
         }
