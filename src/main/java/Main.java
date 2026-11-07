@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class Main {
     private static final OkHttpClient HTTP = new OkHttpClient.Builder()
@@ -243,22 +244,40 @@ public class Main {
                 .build();
         Response pendingResponse = null;
         Exception networkFailure = null;
-        for (int attempt = 1; attempt <= 5; attempt++) {
+        int lastStatus = -1;
+        final int maxAttempts = 10;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            long retryAfterMillis = -1L;
             try {
                 pendingResponse = HTTP.newCall(request).execute();
                 int status = pendingResponse.code();
                 if (pendingResponse.isSuccessful() || !Set.of(429, 500, 502, 503, 504).contains(status)) break;
+                lastStatus = status;
+                String retryAfter = pendingResponse.header("Retry-After");
+                if (retryAfter != null) {
+                    try {
+                        retryAfterMillis = Math.min(120_000L, Math.max(0L, Long.parseLong(retryAfter.trim()) * 1000L));
+                    } catch (NumberFormatException ignored) { }
+                }
                 pendingResponse.close();
                 pendingResponse = null;
-                if (attempt == 5) throw new IllegalStateException("Gemini پس از ۵ تلاش با HTTP " + status + " پاسخ نداد.");
+                if (attempt == maxAttempts)
+                    throw new IllegalStateException("Gemini پس از " + maxAttempts
+                            + " تلاش با HTTP " + lastStatus + " پاسخ نداد.");
             } catch (java.io.IOException ex) {
                 networkFailure = ex;
-                if (attempt == 5) throw ex;
+                if (attempt == maxAttempts) throw ex;
             }
-            Thread.sleep(Math.min(30000L, 2000L * attempt * attempt));
+            long backoffMillis = Math.min(60_000L, 3000L * (1L << Math.min(attempt - 1, 5)));
+            long baseDelay = retryAfterMillis >= 0 ? retryAfterMillis : backoffMillis;
+            long jitter = ThreadLocalRandom.current().nextLong(Math.max(1L, baseDelay / 5L + 1L));
+            Thread.sleep(Math.min(120_000L, baseDelay + jitter));
         }
-        if (pendingResponse == null) throw new IllegalStateException("ارتباط با Gemini برقرار نشد: "
-                + (networkFailure == null ? "پاسخ خالی" : networkFailure.getMessage()));
+        if (pendingResponse == null) {
+            String reason = lastStatus >= 0 ? "HTTP " + lastStatus
+                    : (networkFailure == null ? "پاسخ خالی" : networkFailure.getMessage());
+            throw new IllegalStateException("ارتباط با Gemini برقرار نشد: " + reason);
+        }
         try (Response response = pendingResponse) {
             String raw = response.body() == null ? "" : response.body().string();
             if (!response.isSuccessful())
