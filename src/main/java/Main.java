@@ -38,7 +38,9 @@ public class Main {
         JsonObject repository = event.getAsJsonObject("repository");
         String repoFull = repository.get("full_name").getAsString();
         int prNumber = issue.get("number").getAsInt();
-        String commentBody = event.getAsJsonObject("comment").get("body").getAsString();
+        JsonObject triggeringComment = event.getAsJsonObject("comment");
+        String commentBody = triggeringComment.get("body").getAsString();
+        long triggeringCommentId = triggeringComment.has("id") ? triggeringComment.get("id").getAsLong() : Long.MAX_VALUE;
         String normalizedCommand = commentBody.trim().toLowerCase(Locale.ROOT);
         // /audit alone is read-only. If the user adds a task after /audit, treat it as an edit request
         // instead of silently discarding the requested work.
@@ -59,6 +61,15 @@ public class Main {
         if (requestText.isBlank() && !auditMode) {
             pull.comment("✍️ درخواست را بعد از /fix بنویسید؛ برای بررسی کامل پروژه فقط /audit را ارسال کنید.");
             return;
+        }
+        // Carry a bounded, trusted slice of this PR's earlier conversation into the next
+        // coding request so follow-up instructions do not lose their project context.
+        String modelRequest = requestText;
+        if (!auditMode) {
+            String history = loadRecentConversation(repoFull, prNumber, triggeringCommentId, token);
+            if (!history.isBlank())
+                modelRequest = "زمینه گفت‌وگوی اخیر همین پروژه (برای حفظ پیوستگی؛ دستور فعلی اولویت دارد):\n"
+                        + history + "\n\nدرخواست فعلی کاربر که باید اجرا شود:\n" + requestText;
         }
         // Build-only mode lets a maintainer rerun Android packaging after a code fix
         // without asking Gemini to generate another full-project patch.
@@ -112,7 +123,7 @@ public class Main {
             return;
         }
         pull.comment("🤖 درخواست دریافت شد. در حال تحلیل پروژه و پیاده‌سازی تغییرات در چند فایل مرتبط هستم...");
-        JsonObject answer = askForProjectEdits(project, requestText, geminiKey, model);
+        JsonObject answer = askForProjectEdits(project, modelRequest, geminiKey, model);
         JsonArray edits = answer.getAsJsonArray("edits");
         if (edits == null || edits.isEmpty()) {
             pull.comment("ℹ️ پس از بررسی پروژه، تغییر قابل اعمالی تولید نشد. توضیح: "
@@ -157,7 +168,7 @@ public class Main {
                 repairAttempt++;
                 pull.comment("🛠️ مرحله " + (repairAttempt + 1)
                         + ": تست یا ساخت ناموفق شد؛ Robat2 خطا را تحلیل می‌کند و اصلاح مجدد انجام می‌دهد...");
-                String repairPrompt = "درخواست اصلی کاربر: " + requestText
+                String repairPrompt = "درخواست اصلی کاربر و زمینه مکالمه: " + modelRequest
                         + "\\n\\nتلاش قبلی کد را تغییر داد اما تست/ساخت شکست خورد. "
                         + "خطای واقعی ابزار: \\n" + validationError.getMessage()
                         + "\\n\\nفایل‌های فعلی پروژه را اصلاح کن تا خطا برطرف شود. "
@@ -175,7 +186,7 @@ public class Main {
             // Independent post-build review: ask the model to inspect the actual updated
             // project again and fix only concrete defects before any commit is pushed.
             JsonObject review = askForProjectEdits(project,
-                    "بازبینی مستقل نهایی انجام بده. درخواست اصلی کاربر: " + requestText
+                    "بازبینی مستقل نهایی انجام بده. درخواست اصلی کاربر و زمینه مکالمه: " + modelRequest
                     + "\\nتست Maven و ساخت Android با موفقیت انجام شده‌اند. تمام فایل‌های فعلی را دوباره بررسی کن. "
                     + "فقط اگر ایراد واقعی در منطق، امنیت، سازگاری، یا برآورده‌نشدن درخواست وجود دارد، آن را اصلاح کن. "
                     + "تغییر سلیقه‌ای، قالب‌بندی، بازنویسی غیرضروری یا قابلیت جدید اضافه نکن. "
@@ -213,6 +224,52 @@ public class Main {
                 + "**فایل‌های تغییرکرده:**\n" + fileList
                 + "\nتست پروژه موفق بود و تغییرات روی شاخه همین PR ثبت شد. "
                 + "قبل از ادغام، تغییرات را بازبینی کنید؛ ربات PR را خودکار ادغام نمی‌کند.");
+    }
+
+    private static String loadRecentConversation(String repository, int prNumber,
+                                                 long currentCommentId, String token) {
+        try {
+            String endpoint = "https://api.github.com/repos/" + repository
+                    + "/issues/" + prNumber + "/comments?per_page=100&sort=created&direction=desc";
+            Request request = new Request.Builder().url(endpoint)
+                    .addHeader("Accept", "application/vnd.github+json")
+                    .addHeader("X-GitHub-Api-Version", "2022-11-28")
+                    .addHeader("Authorization", "Bearer " + token)
+                    .get().build();
+            try (Response response = HTTP.newCall(request).execute()) {
+                if (!response.isSuccessful() || response.body() == null) return "";
+                JsonArray comments = JsonParser.parseString(response.body().string()).getAsJsonArray();
+                List<String> selected = new ArrayList<>();
+                int totalChars = 0;
+                for (JsonElement element : comments) {
+                    JsonObject item = element.getAsJsonObject();
+                    if (!item.has("id") || item.get("id").getAsLong() >= currentCommentId) continue;
+                    String body = item.has("body") ? item.get("body").getAsString() : "";
+                    if (body.isBlank() || body.equalsIgnoreCase("/audit")
+                            || body.equalsIgnoreCase("/fix build-only")) continue;
+                    JsonObject user = item.has("user") && item.get("user").isJsonObject()
+                            ? item.getAsJsonObject("user") : new JsonObject();
+                    String login = user.has("login") ? user.get("login").getAsString() : "unknown";
+                    String association = item.has("author_association")
+                            ? item.get("author_association").getAsString() : "";
+                    boolean trustedHuman = Set.of("OWNER", "MEMBER", "COLLABORATOR").contains(association);
+                    boolean projectBot = login.endsWith("[bot]") && body.contains("Robat2");
+                    if (!trustedHuman && !projectBot) continue;
+                    if (body.length() > 2400) body = body.substring(0, 2400) + " …[متن کوتاه شد]";
+                    String entry = (projectBot ? "گزارش Robat2" : "درخواست همکار مجاز (" + login + ")")
+                            + ":\n" + body;
+                    if (totalChars + entry.length() > 14000) break;
+                    selected.add(entry);
+                    totalChars += entry.length();
+                    if (selected.size() >= 12) break;
+                }
+                Collections.reverse(selected);
+                return String.join("\n\n", selected);
+            }
+        } catch (Exception ex) {
+            System.err.println("خواندن سابقه گفت‌وگوی PR ناموفق بود: " + ex.getMessage());
+            return "";
+        }
     }
 
     private static String formatPlan(JsonArray plan) {
