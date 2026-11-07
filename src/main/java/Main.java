@@ -272,33 +272,58 @@ public class Main {
         Response pendingResponse = null;
         Exception networkFailure = null;
         int lastStatus = -1;
-        final int maxAttempts = 10;
+        final int maxAttempts = 3;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-            long retryAfterMillis = -1L;
+            long retryAfterSeconds = -1L;
             try {
                 pendingResponse = HTTP.newCall(request).execute();
                 int status = pendingResponse.code();
                 if (pendingResponse.isSuccessful() || !Set.of(429, 500, 502, 503, 504).contains(status)) break;
+
                 lastStatus = status;
                 String retryAfter = pendingResponse.header("Retry-After");
                 if (retryAfter != null) {
-                    try {
-                        retryAfterMillis = Math.min(120_000L, Math.max(0L, Long.parseLong(retryAfter.trim()) * 1000L));
-                    } catch (NumberFormatException ignored) { }
+                    try { retryAfterSeconds = Math.max(0L, Long.parseLong(retryAfter.trim())); }
+                    catch (NumberFormatException ignored) { }
                 }
+                String errorBody = pendingResponse.body() == null ? "" : pendingResponse.body().string();
                 pendingResponse.close();
                 pendingResponse = null;
+
+                String lowerError = errorBody.toLowerCase(Locale.ROOT);
+                if (status == 429) {
+                    boolean quotaExhausted = lowerError.contains("quota")
+                            || lowerError.contains("per_day")
+                            || lowerError.contains("daily")
+                            || lowerError.contains("billing")
+                            || lowerError.contains("payment")
+                            || lowerError.contains("limit: 0")
+                            || lowerError.contains("resource_exhausted");
+                    if (quotaExhausted)
+                        throw new IllegalStateException("سهمیه Gemini تمام شده یا محدودیت حساب/پرداخت وجود دارد؛ درخواست تکراری ارسال نشد. جزئیات: "
+                                + errorBody.substring(0, Math.min(700, errorBody.length())));
+                    if (retryAfterSeconds < 0)
+                        throw new IllegalStateException("Gemini محدودیت نرخ HTTP 429 اعلام کرد اما Retry-After نفرستاد؛ برای جلوگیری از درخواست‌های بی‌فایده، تلاش مجدد متوقف شد. جزئیات: "
+                                + errorBody.substring(0, Math.min(500, errorBody.length())));
+                    if (retryAfterSeconds > 300)
+                        throw new IllegalStateException("Gemini برای HTTP 429 زمان انتظار " + retryAfterSeconds
+                                + " ثانیه اعلام کرد؛ اجرای خودکار متوقف شد تا workflow بی‌جهت معطل نماند. بعداً دوباره اجرا کنید.");
+                    if (attempt == maxAttempts)
+                        throw new IllegalStateException("Gemini پس از " + maxAttempts + " تلاش هنوز HTTP 429 می‌دهد؛ بعداً دوباره اجرا کنید.");
+                    Thread.sleep(retryAfterSeconds * 1000L);
+                    continue;
+                }
+
                 if (attempt == maxAttempts)
-                    throw new IllegalStateException("Gemini پس از " + maxAttempts
-                            + " تلاش با HTTP " + lastStatus + " پاسخ نداد.");
+                    throw new IllegalStateException("Gemini پس از " + maxAttempts + " تلاش با HTTP " + status
+                            + " پاسخ نداد. جزئیات: " + errorBody.substring(0, Math.min(500, errorBody.length())));
+                long backoffMillis = 3000L * (1L << (attempt - 1));
+                Thread.sleep(backoffMillis);
             } catch (java.io.IOException ex) {
                 networkFailure = ex;
                 if (attempt == maxAttempts) throw ex;
+                Thread.sleep(3000L * (1L << (attempt - 1)));
             }
-            long backoffMillis = Math.min(60_000L, 3000L * (1L << Math.min(attempt - 1, 5)));
-            long baseDelay = retryAfterMillis >= 0 ? retryAfterMillis : backoffMillis;
-            long jitter = ThreadLocalRandom.current().nextLong(Math.max(1L, baseDelay / 5L + 1L));
-            Thread.sleep(Math.min(120_000L, baseDelay + jitter));
         }
         if (pendingResponse == null) {
             String reason = lastStatus >= 0 ? "HTTP " + lastStatus
