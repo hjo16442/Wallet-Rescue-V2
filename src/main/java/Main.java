@@ -65,7 +65,7 @@ public class Main {
         // Carry a bounded, trusted slice of this PR's earlier conversation into the next
         // coding request so follow-up instructions do not lose their project context.
         String modelRequest = requestText;
-        if (!auditMode) {
+        if (!auditMode && !requestText.equalsIgnoreCase("build-only")) {
             String history = loadRecentConversation(repoFull, prNumber, triggeringCommentId, token);
             if (!history.isBlank())
                 modelRequest = "زمینه گفت‌وگوی اخیر همین پروژه (برای حفظ پیوستگی؛ دستور فعلی اولویت دارد):\n"
@@ -252,7 +252,7 @@ public class Main {
                     String association = item.has("author_association")
                             ? item.get("author_association").getAsString() : "";
                     boolean trustedHuman = Set.of("OWNER", "MEMBER", "COLLABORATOR").contains(association);
-                    boolean projectBot = login.endsWith("[bot]") && body.contains("Robat2");
+                    boolean projectBot = login.equals("github-actions[bot]");
                     if (!trustedHuman && !projectBot) continue;
                     if (body.length() > 2400) body = body.substring(0, 2400) + " …[متن کوتاه شد]";
                     String entry = (projectBot ? "گزارش Robat2" : "درخواست همکار مجاز (" + login + ")")
