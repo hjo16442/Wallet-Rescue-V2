@@ -105,6 +105,8 @@ jobs:
           if [ "${{ steps.ai.outcome }}" = "failure" ]; then
             echo "⚠️ **Robat2 AI execution failed. APK packaging was attempted independently.**" >> "$GITHUB_STEP_SUMMARY"
             echo "AI failed; APK packaging result is reported by the build and verification steps."
+          elif [ "${{ steps.ai.outcome }}" = "skipped" ]; then
+            echo "ℹ️ **Robat2 AI step was skipped (build-only mode).**" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "✅ **Robat2 AI execution completed successfully.**" >> "$GITHUB_STEP_SUMMARY"
           fi
