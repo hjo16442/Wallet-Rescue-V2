@@ -12,9 +12,9 @@ import java.util.concurrent.TimeUnit;
 public class Main {
     private static final OkHttpClient HTTP = new OkHttpClient.Builder()
              .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(360, TimeUnit.SECONDS)
+            .readTimeout(300, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
-            .callTimeout(390, TimeUnit.SECONDS)
+            .callTimeout(330, TimeUnit.SECONDS)
             .build();
     private static final int MAX_FILES = 60;
     private static final long MAX_FILE_BYTES = 35_000;
