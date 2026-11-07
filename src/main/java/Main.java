@@ -37,8 +37,13 @@ public class Main {
         String repoFull = repository.get("full_name").getAsString();
         int prNumber = issue.get("number").getAsInt();
         String commentBody = event.getAsJsonObject("comment").get("body").getAsString();
-        boolean auditMode = commentBody.trim().equalsIgnoreCase("/audit") || commentBody.trim().toLowerCase(Locale.ROOT).startsWith("/audit ");
-        if (!auditMode && !commentBody.trim().equalsIgnoreCase("/fix") && !commentBody.trim().toLowerCase(Locale.ROOT).startsWith("/fix ")) return;
+        String normalizedCommand = commentBody.trim().toLowerCase(Locale.ROOT);
+        // /audit alone is read-only. If the user adds a task after /audit, treat it as an edit request
+        // instead of silently discarding the requested work.
+        boolean auditMode = normalizedCommand.equals("/audit");
+        boolean fixMode = normalizedCommand.equals("/fix") || normalizedCommand.startsWith("/fix ")
+                || normalizedCommand.startsWith("/audit ");
+        if (!auditMode && !fixMode) return;
         String requestText = commentBody.replaceFirst("(?is)^/(?:fix|audit)\\s*", "").trim();
 
         GitHub github = new GitHubBuilder().withOAuthToken(token).build();
