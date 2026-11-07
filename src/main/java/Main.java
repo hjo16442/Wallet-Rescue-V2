@@ -210,7 +210,29 @@ public class Main {
     private static int relevanceScore(String path, String request) {
         if (request == null || request.isBlank()) return 0;
         String normalizedPath = path.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ");
-        String normalizedRequest = request.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ");
+        String originalRequest = request.toLowerCase(Locale.ROOT);
+        String normalizedRequest = originalRequest.replaceAll("[^a-z0-9]+", " ");
+        // Persian-to-code vocabulary helps match Persian requests to English source paths.
+        Map<String, List<String>> aliases = Map.ofEntries(
+                Map.entry("ترون", List.of("tron", "trc20")),
+                Map.entry("تتر", List.of("usdt", "token")),
+                Map.entry("بیت کوین", List.of("bitcoin", "btc")),
+                Map.entry("اتریوم", List.of("ethereum", "eth")),
+                Map.entry("کیف پول", List.of("wallet")),
+                Map.entry("موجودی", List.of("balance")),
+                Map.entry("تراکنش", List.of("transaction", "history")),
+                Map.entry("آدرس", List.of("address")),
+                Map.entry("شبکه", List.of("network", "chain")),
+                Map.entry("رابط", List.of("ui", "activity", "layout")),
+                Map.entry("اندروید", List.of("android", "gradle")),
+                Map.entry("امنیت", List.of("security", "crypto"))
+        );
+        StringBuilder expanded = new StringBuilder(normalizedRequest);
+        for (Map.Entry<String, List<String>> alias : aliases.entrySet()) {
+            if (originalRequest.contains(alias.getKey()))
+                for (String word : alias.getValue()) expanded.append(' ').append(word);
+        }
+        normalizedRequest = expanded.toString();
         Set<String> stop = Set.of("the", "and", "for", "with", "from", "this", "that", "please",
                 "make", "add", "fix", "change", "into", "about", "project", "code");
         int score = 0;
