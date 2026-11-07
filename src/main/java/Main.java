@@ -228,7 +228,25 @@ public class Main {
                 .addHeader("x-goog-api-key", key)
                 .post(RequestBody.create(body.toString(), MediaType.parse("application/json")))
                 .build();
-        try (Response response = HTTP.newCall(request).execute()) {
+        Response pendingResponse = null;
+        Exception networkFailure = null;
+        for (int attempt = 1; attempt <= 5; attempt++) {
+            try {
+                pendingResponse = HTTP.newCall(request).execute();
+                int status = pendingResponse.code();
+                if (pendingResponse.isSuccessful() || !Set.of(429, 500, 502, 503, 504).contains(status)) break;
+                pendingResponse.close();
+                pendingResponse = null;
+                if (attempt == 5) throw new IllegalStateException("Gemini پس از ۵ تلاش با HTTP " + status + " پاسخ نداد.");
+            } catch (java.io.IOException ex) {
+                networkFailure = ex;
+                if (attempt == 5) throw ex;
+            }
+            Thread.sleep(Math.min(30000L, 2000L * attempt * attempt));
+        }
+        if (pendingResponse == null) throw new IllegalStateException("ارتباط با Gemini برقرار نشد: "
+                + (networkFailure == null ? "پاسخ خالی" : networkFailure.getMessage()));
+        try (Response response = pendingResponse) {
             String raw = response.body() == null ? "" : response.body().string();
             if (!response.isSuccessful())
                 throw new IllegalStateException("خطای Gemini HTTP " + response.code() + ": " + raw);
