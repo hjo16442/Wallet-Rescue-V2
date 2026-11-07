@@ -54,6 +54,7 @@ jobs:
           GEMINI_MODEL: gemini-3.8-flash
           GITHUB_EVENT_PATH: ${{ github.event_path }}
           TARGET_DIR: .
+        id: ai
         run: mvn -B -q exec:java -Dexec.mainClass="Main"
         continue-on-error: true
 
@@ -84,3 +85,21 @@ jobs:
           path: target/robat2app/build/outputs/apk/debug/robat2app-debug.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Report AI failure without hiding it
+        if: steps.ai.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue_number = context.issue.number;
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number,
+              body: "⚠️ **Robat2 نتوانست درخواست هوش مصنوعی را کامل کند.** ساخت APK جداگانه ادامه یافت و اگر موفق باشد فایل‌ها در بخش Artifacts موجودند. اجرای workflow در پایان ناموفق علامت‌گذاری می‌شود تا خطای AI پنهان نماند. گزارش دقیق خطا را در بخش Run AI Developer همین اجرا ببینید."
+            });
+
+      - name: Mark AI failure as workflow failure
+        if: steps.ai.outcome == 'failure'
+        run: |
+          echo "Robat2 AI execution failed. APK packaging was still attempted."
+          exit 1
