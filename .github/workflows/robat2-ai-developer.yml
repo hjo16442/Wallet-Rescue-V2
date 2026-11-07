@@ -17,7 +17,7 @@ jobs:
   fix:
     if: |
       github.event.issue.pull_request != null &&
-      (github.event.comment.body == '/fix' || startsWith(github.event.comment.body, '/fix ')) &&
+      (github.event.comment.body == '/fix' || startsWith(github.event.comment.body, '/fix ') || github.event.comment.body == '/audit' || startsWith(github.event.comment.body, '/audit ')) &&
       github.event.comment.user.type != 'Bot' &&
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: ubuntu-latest
@@ -51,6 +51,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: gemini-3.8-flash
           GITHUB_EVENT_PATH: ${{ github.event_path }}
           TARGET_DIR: .
         run: mvn -B -q exec:java -Dexec.mainClass="Main"
