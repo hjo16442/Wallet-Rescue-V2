@@ -173,23 +173,23 @@ public class MainActivity extends Activity {
         });
     }
     private void addMessage(String text, boolean fromUser) {
-        if (messages == null) return;
-        TextView bubble = new TextView(this);
-        bubble.setText(text);
-        bubble.setTextSize(14);
-        bubble.setTextColor(fromUser ? 0xFFFFFFFF : 0xFF1D2A3D);
-        bubble.setPadding(dp(14), dp(11), dp(14), dp(11));
-        bubble.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
-                fromUser ? 0xFF2457A6 : 0xFFE4EAF2));
-        bubble.setBackgroundResource(android.R.drawable.dialog_holo_light_frame);
-        bubble.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
-                fromUser ? 0xFF2457A6 : 0xFFE4EAF2));
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                fromUser ? (int)(getResources().getDisplayMetrics().widthPixels * 0.82f) : -1, -2);
-        lp.topMargin = dp(7);
-        lp.gravity = fromUser ? android.view.Gravity.END : android.view.Gravity.START;
-        messages.addView(bubble, lp);
-        if (mainScroll != null) mainScroll.post(() -> mainScroll.fullScroll(android.view.View.FOCUS_DOWN));
+        runOnUiThread(() -> {
+            if (messages == null) return;
+            TextView bubble = new TextView(this);
+            bubble.setText(text);
+            bubble.setTextSize(14);
+            bubble.setTextColor(fromUser ? 0xFFFFFFFF : 0xFF1D2A3D);
+            bubble.setPadding(dp(14), dp(11), dp(14), dp(11));
+            bubble.setBackgroundResource(android.R.drawable.dialog_holo_light_frame);
+            bubble.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                    fromUser ? 0xFF2457A6 : 0xFFE4EAF2));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    fromUser ? (int)(getResources().getDisplayMetrics().widthPixels * 0.82f) : -1, -2);
+            lp.topMargin = dp(7);
+            lp.gravity = fromUser ? android.view.Gravity.END : android.view.Gravity.START;
+            messages.addView(bubble, lp);
+            if (mainScroll != null) mainScroll.post(() -> mainScroll.fullScroll(android.view.View.FOCUS_DOWN));
+        });
     }
 
     private String waitForAgentReply(String repository, int number, String secret, long requestId) {
