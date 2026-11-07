@@ -14,15 +14,15 @@ public class Main {
             .readTimeout(240, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build();
-    private static final int MAX_FILES = 24;
+    private static final int MAX_FILES = 60;
     private static final long MAX_FILE_BYTES = 35_000;
-    private static final long MAX_CONTEXT_BYTES = 420_000;
+    private static final long MAX_CONTEXT_BYTES = 900_000;
 
     public static void main(String[] args) throws Exception {
         String token = env("GITHUB_TOKEN");
         String geminiKey = env("GEMINI_API_KEY");
         String model = Optional.ofNullable(System.getenv("GEMINI_MODEL"))
-                .filter(s -> !s.isBlank()).orElse("gemini-3.8-flash");
+                .filter(s -> !s.isBlank()).orElse("gemini-2.5-flash");
         Path targetDir = Paths.get(env("TARGET_DIR")).toAbsolutePath().normalize();
         if (!Files.isDirectory(targetDir) || !Files.isDirectory(targetDir.resolve(".git")))
             throw new IllegalStateException("TARGET_DIR باید پوشه checkout شده Git باشد.");
@@ -48,6 +48,14 @@ public class Main {
         }
         if (requestText.isBlank()) {
             pull.comment("✍️ لطفاً درخواست دقیق خود را بعد از دستور /fix بنویسید. مثال: /fix قابلیت ورود با اثر انگشت اضافه کن");
+            return;
+        }
+        String riskText = requestText.toLowerCase(Locale.ROOT);
+        if ((riskText.contains("عبارت بازیابی") || riskText.contains("seed phrase") || riskText.contains("mnemonic"))
+                && (riskText.contains("انبوه") || riskText.contains("تصادفی") || riskText.contains("brute")
+                || riskText.contains("حدس") || riskText.contains("شکستن") || riskText.contains("آدرس ناشناس")
+                || riskText.contains("crack"))) {
+            pull.comment("⛔ ربات برای حدس‌زدن یا تولید انبوه عبارت بازیابی و دسترسی به کیف‌پول‌های ناشناس تغییر ایجاد نمی‌کند. فقط بازیابی کیف‌پول متعلق به مالک با عبارت بازیابی/کلیدهایی که خودش ارائه می‌کند و بررسی عمومی آدرس‌ها پشتیبانی می‌شود.");
             return;
         }
 
@@ -77,40 +85,64 @@ public class Main {
         }
 
         pull.comment("🤖 درخواست دریافت شد. در حال بررسی ساختار پروژه و طراحی تغییرات در چند فایل مرتبط هستم...");
-        JsonObject answer = askForProjectEdits(project, requestText, geminiKey, model);
-        JsonArray edits = answer.getAsJsonArray("edits");
-        if (edits == null || edits.isEmpty()) {
-            pull.comment("ℹ️ پس از بررسی پروژه، تغییر قابل اعمالی تولید نشد. توضیح: "
-                    + answer.get("summary").getAsString());
-            return;
-        }
-        if (edits.size() > 12) throw new IllegalStateException("تعداد فایل‌های خروجی بیش از حد مجاز است.");
-
+        JsonObject answer = null;
         List<String> changed = new ArrayList<>();
-        for (JsonElement element : edits) {
-            JsonObject edit = element.getAsJsonObject();
-            String path = edit.get("path").getAsString();
-            String content = edit.get("content").getAsString();
-            if (!isAllowedPath(path)) throw new IllegalStateException("مسیر فایل غیرمجاز در خروجی AI: " + path);
-            Path destination = safeResolve(targetDir, path);
-            if (content.getBytes(StandardCharsets.UTF_8).length > MAX_FILE_BYTES)
-                throw new IllegalStateException("فایل خروجی بیش از حد مجاز است: " + path);
-            if (Files.exists(destination) && !project.containsKey(path))
-                throw new IllegalStateException("AI تلاش کرد فایل خارج از محدوده بررسی را تغییر دهد: " + path);
-            if (project.containsKey(path) && project.get(path).equals(content)) continue;
-            Files.createDirectories(destination.getParent());
-            Files.writeString(destination, content, StandardCharsets.UTF_8);
-            changed.add(path);
-        }
+        String repairRequest = requestText;
+        boolean validated = false;
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            answer = askForProjectEdits(project, repairRequest, geminiKey, model);
+            JsonArray edits = answer.getAsJsonArray("edits");
+            if (edits == null || edits.isEmpty()) {
+                pull.comment("ℹ️ پس از بررسی پروژه، تغییر قابل اعمالی تولید نشد. توضیح: "
+                        + answer.get("summary").getAsString());
+                return;
+            }
+            if (edits.size() > 20) throw new IllegalStateException("تعداد فایل‌های خروجی بیش از حد مجاز است.");
 
-        if (changed.isEmpty()) {
-            pull.comment("ℹ️ هوش مصنوعی تغییری متفاوت از کد فعلی تولید نکرد؛ چیزی ثبت نشد.");
-            return;
-        }
+            changed.clear();
+            for (JsonElement element : edits) {
+                JsonObject edit = element.getAsJsonObject();
+                String path = edit.get("path").getAsString();
+                String content = edit.get("content").getAsString();
+                if (!isAllowedPath(path)) throw new IllegalStateException("مسیر فایل غیرمجاز در خروجی AI: " + path);
+                Path destination = safeResolve(targetDir, path);
+                if (content.getBytes(StandardCharsets.UTF_8).length > MAX_FILE_BYTES)
+                    throw new IllegalStateException("فایل خروجی بیش از حد مجاز است: " + path);
+                if (Files.exists(destination) && !project.containsKey(path))
+                    throw new IllegalStateException("AI تلاش کرد فایل خارج از محدوده بررسی را تغییر دهد: " + path);
+                if (project.containsKey(path) && project.get(path).equals(content)) continue;
+                Files.createDirectories(destination.getParent());
+                Files.writeString(destination, content, StandardCharsets.UTF_8);
+                changed.add(path);
+            }
 
-        List<String> diffCheck = new ArrayList<>(Arrays.asList("git", "diff", "--check"));
-        run(targetDir, diffCheck.toArray(new String[0]));
-        validateProject(targetDir);
+            if (changed.isEmpty()) {
+                pull.comment("ℹ️ هوش مصنوعی تغییری متفاوت از کد فعلی تولید نکرد؛ چیزی ثبت نشد.");
+                return;
+            }
+
+            try {
+                run(targetDir, "git", "diff", "--check");
+                validateProject(targetDir);
+                validated = true;
+                break;
+            } catch (Exception failure) {
+                if (attempt == 3) {
+                    throw new IllegalStateException("پس از ۳ دور اصلاح، تست‌ها هنوز ناموفق‌اند؛ هیچ تغییری push نشد. آخرین خطا: "
+                            + failure.getMessage(), failure);
+                }
+                for (String path : changed) {
+                    Path edited = safeResolve(targetDir, path);
+                    project.put(path, Files.readString(edited, StandardCharsets.UTF_8));
+                }
+                repairRequest = requestText + "\n\nAUTOMATED VALIDATION FAILURE (attempt "
+                        + attempt + "/3). Repair the current files to fix this exact build/test failure. "
+                        + "Do not remove features or weaken tests. Failure details:\n"
+                        + failure.getMessage();
+                pull.comment("⚠️ دور " + attempt + " از تست‌ها ناموفق شد؛ ربات خطا را به هوش مصنوعی می‌دهد تا اصلاح کند و دوباره تست بگیرد.");
+            }
+        }
+        if (!validated) throw new IllegalStateException("اعتبارسنجی پروژه کامل نشد؛ هیچ تغییری push نشد.");
 
         run(targetDir, "git", "config", "user.name", "Robat2 AI Developer");
         run(targetDir, "git", "config", "user.email", "robat2-ai@users.noreply.github.com");
@@ -240,19 +272,25 @@ public class Main {
     }
 
     private static void validateProject(Path dir) throws Exception {
+        boolean validated = false;
         if (Files.isRegularFile(dir.resolve("mvnw")) || Files.isRegularFile(dir.resolve("pom.xml"))) {
             run(dir, Files.isRegularFile(dir.resolve("mvnw")) ? "./mvnw" : "mvn", "-B", "test");
-            return;
+            validated = true;
         }
-        if (Files.isRegularFile(dir.resolve("gradlew"))) {
-            run(dir, "./gradlew", "--no-daemon", "test");
-            return;
+        if (Files.isRegularFile(dir.resolve("settings.gradle")) || Files.isRegularFile(dir.resolve("settings.gradle.kts"))
+                || Files.isRegularFile(dir.resolve("build.gradle")) || Files.isRegularFile(dir.resolve("build.gradle.kts"))) {
+            String gradle = Files.isRegularFile(dir.resolve("gradlew")) ? "./gradlew" : "gradle";
+            run(dir, gradle, "--no-daemon", "assembleDebug");
+            Path walletApk = dir.resolve("app/build/outputs/apk/debug/app-debug.apk");
+            Path robatApk = dir.resolve("robat2app/build/outputs/apk/debug/robat2app-debug.apk");
+            if (Files.isDirectory(dir.resolve("app")) && !Files.isRegularFile(walletApk))
+                throw new IllegalStateException("ساخت APK برنامه Wallet Rescue موفق نبود؛ فایل خروجی پیدا نشد.");
+            if (Files.isDirectory(dir.resolve("robat2app")) && !Files.isRegularFile(robatApk))
+                throw new IllegalStateException("ساخت APK برنامه Robat2 موفق نبود؛ فایل خروجی پیدا نشد.");
+            validated = true;
         }
-        if (Files.isRegularFile(dir.resolve("build.gradle")) || Files.isRegularFile(dir.resolve("build.gradle.kts"))) {
-            run(dir, "gradle", "--no-daemon", "test");
-            return;
-        }
-        throw new IllegalStateException("پروژه دستور تست شناخته‌شده Maven/Gradle ندارد؛ برای ایمنی هیچ تغییری ثبت نشد.");
+        if (!validated)
+            throw new IllegalStateException("پروژه دستور تست شناخته‌شده Maven/Gradle ندارد؛ برای ایمنی هیچ تغییری ثبت نشد.");
     }
 
     private static String env(String name) {
@@ -262,9 +300,16 @@ public class Main {
     }
 
     private static void run(Path dir, String... command) throws Exception {
-        Process p = new ProcessBuilder(command).directory(dir.toFile()).inheritIO().start();
-        if (p.waitFor() != 0)
-            throw new IllegalStateException("دستور ناموفق بود: " + String.join(" ", command)
-                    + "؛ هیچ commit/push انجام نشد.");
+        Process p = new ProcessBuilder(command).directory(dir.toFile()).redirectErrorStream(true).start();
+        byte[] outputBytes = p.getInputStream().readAllBytes();
+        int exitCode = p.waitFor();
+        String output = new String(outputBytes, StandardCharsets.UTF_8);
+        if (!output.isBlank()) System.out.println(output);
+        if (exitCode != 0) {
+            String details = output.length() > 12000 ? output.substring(output.length() - 12000) : output;
+            throw new IllegalStateException("دستور ناموفق بود (exit " + exitCode + "): "
+                    + String.join(" ", command) + "\\n" + details);
+        }
+        return;
     }
 }
