@@ -19,6 +19,8 @@ public class MainActivity extends Activity {
     private EditText repo, token, request;
     private TextView status;
     private Button send, audit;
+    private LinearLayout messages;
+    private ScrollView mainScroll;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
 
     @Override public void onCreate(Bundle state) {
@@ -26,6 +28,7 @@ public class MainActivity extends Activity {
         getWindow().setStatusBarColor(0xFF101827);
         getWindow().setNavigationBarColor(0xFF101827);
         ScrollView scroll = new ScrollView(this);
+        mainScroll = scroll;
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(22),dp(28),dp(22),dp(24));
@@ -57,6 +60,17 @@ public class MainActivity extends Activity {
         note.setText("امنیت: توکن فقط هنگام ارسال در حافظه برنامه استفاده می‌شود و در مخزن یا پیام درخواست ذخیره نمی‌شود. آن را برای کسی نفرستید.");
         note.setTextSize(12); note.setTextColor(0xFF68758A);
         LinearLayout.LayoutParams nt=params(); nt.topMargin=dp(20); root.addView(note,nt);
+
+        TextView chatTitle = new TextView(this);
+        chatTitle.setText("گفت‌وگو با Robat2");
+        chatTitle.setTextSize(19); chatTitle.setTypeface(null, Typeface.BOLD);
+        chatTitle.setTextColor(0xFF17243A);
+        LinearLayout.LayoutParams ct=params(); ct.topMargin=dp(24); root.addView(chatTitle,ct);
+        messages = new LinearLayout(this);
+        messages.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams mp=params(); mp.topMargin=dp(8); root.addView(messages,mp);
+        addMessage("سلام! درخواستت را بنویس. Robat2 آن را در پروژه بررسی و اجرا می‌کند و پاسخ GitHub را همین‌جا نشان می‌دهد.", false);
+
         setContentView(scroll);
         send.setOnClickListener(v -> submit(false));
         audit.setOnClickListener(v -> submit(true));
@@ -101,7 +115,9 @@ public class MainActivity extends Activity {
         final String instruction=request.getText().toString().trim();
         if(!repository.matches("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")){status.setText("نام مخزن را دقیقاً به شکل owner/repository وارد کنید؛ مثال: hjo16442/Wallet-Rescue-V2");return;}
         if(secret.isEmpty()||(!auditMode && instruction.isEmpty())){status.setText("توکن را وارد کنید؛ برای اجرای درخواست، متن درخواست هم لازم است.");return;}
-        send.setEnabled(false); status.setText("در حال پیدا کردن آخرین PR باز مخزن...");
+        send.setEnabled(false); audit.setEnabled(false);
+        addMessage(auditMode ? "درخواست شما: بررسی کامل پروژه" : "درخواست شما: " + instruction, true);
+        status.setText("در حال پیدا کردن آخرین PR باز مخزن...");
         ((InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(request.getWindowToken(),0);
         worker.execute(()->{
             HttpURLConnection c=null;
@@ -130,15 +146,92 @@ public class MainActivity extends Activity {
                 int code=c.getResponseCode();
                 String response=readResponse(c);
                 String message;
-                if(code==201) message=(auditMode ? "درخواست بررسی کامل" : "درخواست اصلاح کد")+" با موفقیت در PR #"+number+" ثبت شد. اجرای Robat2 به فعال بودن GitHub Actions وابسته است.";
+                long requestCommentId = -1L;
+                if (code == 201) {
+                    try { requestCommentId = new JSONObject(response).getLong("id"); } catch (Exception ignored) { }
+                    message=(auditMode ? "درخواست بررسی کامل" : "درخواست اصلاح کد")+" با موفقیت در PR #"+number+" ثبت شد. در حال دریافت پاسخ Robat2...";
+                }
                 else if(code==401||code==403) message="GitHub دسترسی را نپذیرفت (HTTP "+code+"). مجوز Issues: Write را بررسی کن.";
                 else if(code==404) message="PR یا مخزن پیدا نشد؛ نام مخزن را بررسی کن.";
                 else message="ارسال ناموفق بود (HTTP "+code+"): "+response.substring(0,Math.min(220,response.length()));
                 final String out=message;
                 runOnUiThread(()->status.setText(out));
+                if (code == 201 && requestCommentId > 0) {
+                    runOnUiThread(()->addMessage("درخواست در PR #" + number + " ثبت شد؛ منتظر اجرای هوش مصنوعی هستم...", false));
+                    String agentReply = waitForAgentReply(encodedRepo, number, secret, requestCommentId);
+                    if (agentReply == null) {
+                        runOnUiThread(()->{
+                            status.setText("زمان انتظار تمام شد. ممکن است اجرای GitHub Actions هنوز ادامه داشته باشد.");
+                            addMessage("هنوز پاسخ نهایی نرسیده است. وضعیت اجرا را از صفحه Actions بررسی کن: https://github.com/" + encodedRepo + "/actions", false);
+                        });
+                    } else {
+                        runOnUiThread(()->status.setText("پاسخ Robat2 دریافت شد."));
+                    }
+                }
             }catch(Exception ex){runOnUiThread(()->status.setText("خطای ارتباط: "+ex.getMessage()));}
-            finally{if(c!=null)c.disconnect();runOnUiThread(()->send.setEnabled(true));}
+            finally{if(c!=null)c.disconnect();runOnUiThread(()->{send.setEnabled(true);audit.setEnabled(true);});}
         });
     }
+    private void addMessage(String text, boolean fromUser) {
+        if (messages == null) return;
+        TextView bubble = new TextView(this);
+        bubble.setText(text);
+        bubble.setTextSize(14);
+        bubble.setTextColor(fromUser ? 0xFFFFFFFF : 0xFF1D2A3D);
+        bubble.setPadding(dp(14), dp(11), dp(14), dp(11));
+        bubble.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                fromUser ? 0xFF2457A6 : 0xFFE4EAF2));
+        bubble.setBackgroundResource(android.R.drawable.dialog_holo_light_frame);
+        bubble.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                fromUser ? 0xFF2457A6 : 0xFFE4EAF2));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                fromUser ? (int)(getResources().getDisplayMetrics().widthPixels * 0.82f) : -1, -2);
+        lp.topMargin = dp(7);
+        lp.gravity = fromUser ? android.view.Gravity.END : android.view.Gravity.START;
+        messages.addView(bubble, lp);
+        if (mainScroll != null) mainScroll.post(() -> mainScroll.fullScroll(android.view.View.FOCUS_DOWN));
+    }
+
+    private String waitForAgentReply(String repository, int number, String secret, long requestId) {
+        long lastSeenId = requestId;
+        for (int attempt = 0; attempt < 24; attempt++) {
+            try {
+                Thread.sleep(5000L);
+                HttpURLConnection c = null;
+                try {
+                    String endpoint = "https://api.github.com/repos/" + repository
+                            + "/issues/" + number + "/comments?per_page=100&sort=created&direction=desc";
+                    c = openApi(endpoint, secret);
+                    if (c.getResponseCode() != 200) continue;
+                    JSONArray comments = new JSONArray(readResponse(c));
+                    for (int i = 0; i < comments.length(); i++) {
+                        JSONObject item = comments.getJSONObject(i);
+                        long id = item.optLong("id", 0L);
+                        if (id <= lastSeenId) continue;
+                        String body = item.optString("body", "");
+                        String login = item.optJSONObject("user") == null ? ""
+                                : item.getJSONObject("user").optString("login", "");
+                        if (!login.endsWith("[bot]") && !body.contains("Robat2")) continue;
+                        lastSeenId = Math.max(lastSeenId, id);
+                        addMessage("Robat2:\n" + body, false);
+                        if (body.contains("## ✅ تغییرات درخواستی پیاده‌سازی شد")
+                                || body.contains("## 🔎 گزارش بررسی کامل")
+                                || body.contains("⚠️ **اجرای هوش مصنوعی Robat2 ناموفق بود")
+                                || body.contains("تغییر قابل اعمالی تولید نشد")
+                                || body.contains("⛔")) return body;
+                    }
+                } finally {
+                    if (c != null) c.disconnect();
+                }
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                return null;
+            } catch (Exception ignored) {
+                // A transient polling/network error must not discard the submitted request.
+            }
+        }
+        return null;
+    }
+
     @Override protected void onDestroy(){super.onDestroy();worker.shutdownNow();}
 }
