@@ -15,11 +15,8 @@ public class Main {
             .readTimeout(360, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build();
-    // Keep the model context bounded: asking for complete file replacements from a huge
-    // repository snapshot can exhaust Gemini's output-token budget and abort the build.
-    private static final int MAX_FILES = 48;
-    private static final long MAX_FILE_BYTES = 100_000;
-    private static final long MAX_CONTEXT_BYTES = 320_000;
+    // Repository scope and patch size are not capped by Robat2. Provider token/context
+    // quotas remain external platform constraints and are reported without silent truncation.
 
     public static void main(String[] args) throws Exception {
         String token = env("GITHUB_TOKEN");
@@ -79,17 +76,13 @@ public class Main {
                         + history + "\n\nدرخواست فعلی کاربر که باید اجرا شود:\n" + requestText;
         }
 
-        int maxEditsPerPass = autonomyLevel == 1 ? 3 : 6;
-        int maxRepairAttempts = autonomyLevel == 1 ? 1 : autonomyLevel == 2 ? 2 : 3;
         if (!auditMode) {
             String profile = switch (autonomyLevel) {
-                case 1 -> "سطح ۱ - ربات حرفه‌ای: درخواست را دقیق اجرا کن، فایل‌های مرتبط را پیدا کن، تغییر محدود و امن بده، تست و ساخت را اجرا کن و نتیجه واقعی را گزارش کن.";
-                case 2 -> "سطح ۲ - مهندس خودکار: زمینه مرتبط مخزن و وابستگی‌ها را تحلیل کن، تغییرات چندفایلی هماهنگ بده، کنترل‌های امنیتی و تست‌ها را اجرا کن، خطاهای واقعی را حداکثر دو دور اصلاح کن و فقط نتیجه تأییدشده را گزارش کن.";
-                default -> "سطح ۳ - دستیار توسعه مستقل: هدف را به مراحل طراحی، پیاده‌سازی، تست، اصلاح، مستندسازی و آماده‌سازی انتشار تقسیم کن؛ همه مراحل ممکن در همین مخزن و مجوزهای موجود را انجام بده، وابستگی‌ها و اثرات جانبی را بررسی کن، نتیجه هر مرحله را اعتبارسنجی کن و موارد نیازمند کلید، هزینه، دسترسی بیرونی یا تأیید انسانی را متوقف و شفاف اعلام کن. عملیات حساس یا انتشار بیرونی بدون تأیید صریح ممنوع است.";
+                case 1 -> "سطح ۱ - اجرای مستقیم: درخواست را دقیق بفهم، همه فایل‌های لازم را بررسی و تغییر بده، تست و ساخت را اجرا کن و نتیجه واقعی را گزارش کن.";
+                case 2 -> "سطح ۲ - مهندسی کامل: کل مخزن و وابستگی‌های مرتبط را تحلیل کن، تغییرات چندفایلی هماهنگ انجام بده، تست‌ها و کنترل‌های کیفیت را اجرا کن و خطاها را تا رسیدن به نتیجه معتبر پیگیری و اصلاح کن.";
+                default -> "سطح ۳ - توسعه مستقل: هدف را به مراحل طراحی، پیاده‌سازی، تست، اصلاح، مستندسازی و آماده‌سازی انتشار تبدیل کن؛ همه مراحل ممکن در مخزن و مجوزهای موجود را کامل انجام بده، وابستگی‌ها و اثرات جانبی را بررسی کن و وضعیت هر مرحله را شفاف گزارش بده. عملیات حساس یا انتشار بیرونی همچنان نیازمند تأیید صریح است.";
             };
             modelRequest = "پروفایل اجرای انتخاب‌شده:\n" + profile
-                    + "\n\nحداکثر فایل در هر مرحله: " + maxEditsPerPass
-                    + "؛ حداکثر تلاش اصلاح پس از شکست تست: " + maxRepairAttempts
                     + "\n\nدستور کاربر:\n" + modelRequest;
         }
         // Build-only mode lets a maintainer rerun Android packaging after a code fix
@@ -106,17 +99,13 @@ public class Main {
         }
 
         Map<String, String> project = new LinkedHashMap<>();
-        long total = 0;
         for (String relative : paths) {
             Path file = safeResolve(targetDir, relative);
             if (!Files.isRegularFile(file)) continue;
-            long size = Files.size(file);
-            if (size == 0 || size > MAX_FILE_BYTES || total + size > MAX_CONTEXT_BYTES) continue;
             try {
                 String content = Files.readString(file, StandardCharsets.UTF_8);
                 if (content.indexOf('\u0000') >= 0) continue;
                 project.put(relative, content);
-                total += size;
             } catch (Exception ignored) { }
         }
         if (project.isEmpty()) {
@@ -151,8 +140,6 @@ public class Main {
                     + answer.get("summary").getAsString() + "\n\n" + formatPlan(answer.getAsJsonArray("plan")));
             return;
         }
-        if (edits.size() > maxEditsPerPass) throw new IllegalStateException("تعداد فایل‌های خروجی بیش از حد مجاز برای سطح انتخاب‌شده است.");
-
         List<String> changed = new ArrayList<>();
         int repairAttempt = 0;
         while (true) {
@@ -162,8 +149,6 @@ public class Main {
                 String content = edit.get("content").getAsString();
                 if (!isAllowedPath(path)) throw new IllegalStateException("مسیر فایل غیرمجاز در خروجی AI: " + path);
                 Path destination = safeResolve(targetDir, path);
-                if (content.getBytes(StandardCharsets.UTF_8).length > MAX_FILE_BYTES)
-                    throw new IllegalStateException("فایل خروجی بیش از حد مجاز است: " + path);
                 if (Files.exists(destination) && !project.containsKey(path))
                     throw new IllegalStateException("AI تلاش کرد فایل خارج از محدوده بررسی را تغییر دهد: " + path);
                 if (project.containsKey(path) && project.get(path).equals(content)) continue;
@@ -182,10 +167,6 @@ public class Main {
                 run(targetDir, "git", "diff", "--check");
                 validateProject(targetDir);
             } catch (Exception validationError) {
-                if (repairAttempt >= maxRepairAttempts) {
-                    throw new IllegalStateException("پس از " + (maxRepairAttempts + 1) + " دور پیاده‌سازی/اصلاح، تست پروژه همچنان ناموفق بود. آخرین خطا: "
-                            + validationError.getMessage(), validationError);
-                }
                 repairAttempt++;
                 pull.comment("🛠️ مرحله " + (repairAttempt + 1)
                         + ": تست یا ساخت ناموفق شد؛ Robat2 خطا را تحلیل می‌کند و اصلاح مجدد انجام می‌دهد...");
@@ -199,8 +180,6 @@ public class Main {
                 if (edits == null || edits.isEmpty())
                     throw new IllegalStateException("هوش مصنوعی برای اصلاح خطای تست، تغییر معتبری ارائه نکرد: "
                             + validationError.getMessage());
-                if (edits.size() > maxEditsPerPass)
-                    throw new IllegalStateException("تعداد فایل‌های اصلاحی بیش از حد مجاز برای سطح انتخاب‌شده است.");
                 continue;
             }
 
@@ -279,8 +258,7 @@ public class Main {
     private static String formatPlan(JsonArray plan) {
         if (plan == null || plan.isEmpty()) return "";
         StringBuilder out = new StringBuilder("**مراحل اجرا:**\n");
-        int limit = Math.min(plan.size(), 8);
-        for (int i = 0; i < limit; i++) {
+        for (int i = 0; i < plan.size(); i++) {
             JsonElement step = plan.get(i);
             if (step != null && step.isJsonPrimitive())
                 out.append(i + 1).append(". ").append(step.getAsString()).append("\n");
@@ -300,30 +278,7 @@ public class Main {
         // This prevents the fixed file limit from hiding the most relevant module in large repos.
         result.sort(Comparator.comparingInt((String path) -> relevanceScore(path, request)).reversed()
                 .thenComparingInt(Main::filePriority).thenComparing(String::compareTo));
-        if (result.size() > MAX_FILES) {
-            List<String> selected = new ArrayList<>();
-            // Always retain project entry points and build configuration, even when many
-            // request-matching files would otherwise crowd them out of the context window.
-            for (String path : result) {
-                if (isEssentialContextFile(path)) selected.add(path);
-            }
-            for (String path : result) {
-                if (selected.size() >= MAX_FILES) break;
-                if (!selected.contains(path)) selected.add(path);
-            }
-            return selected;
-        }
         return result;
-    }
-
-    private static boolean isEssentialContextFile(String path) {
-        String name = path.toLowerCase(Locale.ROOT);
-        return name.equals("pom.xml") || name.equals("build.gradle")
-                || name.equals("build.gradle.kts") || name.equals("settings.gradle")
-                || name.equals("settings.gradle.kts") || name.equals("gradle.properties")
-                || name.equals("readme.md") || name.equals("app/build.gradle")
-                || name.equals("robat2app/build.gradle")
-                || name.endsWith("/androidmanifest.xml");
     }
 
     private static int relevanceScore(String path, String request) {
@@ -478,7 +433,7 @@ public class Main {
         String prompt = """
                 You are an autonomous senior software engineer working on the user's repository.
                 Execution profiles are supplied in USER REQUEST: Level 1 means focused implementation and validation;
-                Level 2 means repository-aware multi-file engineering, security checks, and bounded repair retries;
+                Level 2 means repository-wide multi-file engineering, security checks, and persistent repair until validated;
                 Level 3 means end-to-end planning, implementation, testing, documentation, release preparation, and
                 explicit reporting of blocked steps. Higher levels increase planning and verification, never permissions.
                 Never deploy externally, spend money, access unrelated accounts, expose secrets, or perform irreversible
@@ -500,8 +455,8 @@ public class Main {
                 Return ONLY valid JSON with this exact shape:
                 {"summary":"short Persian explanation of implemented work","plan":["ordered implementation step"],"edits":[{"path":"relative/path","content":"complete full file content"}]}
                 Before editing, decompose the request into concrete ordered steps and preserve each user requirement.
-                The plan must contain 2-8 concise Persian steps. Implement every feasible step, not just the easiest one.
-                The edits array may be empty if no safe, meaningful implementation is possible. Prefer focused patches and avoid unrelated changes. Return no more than 6 edited files in one pass; prioritize files essential to the user's request and do not rewrite documentation or unrelated files just to fill the response. Keep each returned file complete but concise. Do not repeat the full request or source code in the summary.
+                The plan should contain all concrete Persian implementation steps needed for the request. Implement every feasible step, not just the easiest one.
+                The edits array may be empty if no safe, meaningful implementation is possible. Make every necessary coordinated file change; do not silently omit files because of an internal file-count cap. Keep each returned file complete. Do not repeat the full request or source code in the summary.
                 Do not use markdown fences. Escape JSON strings correctly.
                 
                 USER REQUEST:
@@ -512,7 +467,7 @@ public class Main {
         JsonObject content = new JsonObject(); content.add("parts", parts);
         JsonArray contents = new JsonArray(); contents.add(content);
         JsonObject config = new JsonObject();
-        config.addProperty("maxOutputTokens", 32768);
+        config.addProperty("maxOutputTokens", 65536);
         config.addProperty("responseMimeType", "application/json");
         JsonObject body = new JsonObject();
         body.add("contents", contents); body.add("generationConfig", config);
@@ -524,8 +479,9 @@ public class Main {
         Response pendingResponse = null;
         Exception networkFailure = null;
         int lastStatus = -1;
-        final int maxAttempts = 5;
-        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+        long attempt = 0;
+        while (true) {
+            attempt++;
             try {
                 pendingResponse = HTTP.newCall(request).execute();
                 int status = pendingResponse.code();
@@ -541,22 +497,12 @@ public class Main {
                     throw new IllegalStateException("سهمیه روزانه Gemini یا محدودیت پرداخت/حساب تمام شده است؛ برای جلوگیری از مصرف بیهوده، درخواست تکرار نشد. جزئیات: "
                             + errorBody.substring(0, Math.min(700, errorBody.length())));
                 }
-                if (attempt == maxAttempts) {
-                    throw new IllegalStateException("Gemini پس از " + maxAttempts + " تلاش با HTTP " + status
-                            + " پاسخ نداد. جزئیات: " + errorBody.substring(0, Math.min(500, errorBody.length())));
-                }
-
-                long backoffSeconds = Math.min(60L, 3L * (1L << (attempt - 1)));
+                long backoffSeconds = Math.min(60L, 3L * (1L << (int) Math.min(attempt - 1, 4L)));
                 long waitSeconds = retryAfterSeconds >= 0 ? retryAfterSeconds : backoffSeconds;
-                if (waitSeconds > 300L) {
-                    throw new IllegalStateException("Gemini برای HTTP " + status + " زمان انتظار "
-                            + waitSeconds + " ثانیه اعلام کرده است؛ اجرای مجدد خودکار از سقف ۵ دقیقه بیشتر نمی‌شود. بعداً دوباره تلاش کنید.");
-                }
                 Thread.sleep(waitSeconds * 1000L);
             } catch (java.io.IOException ex) {
                 networkFailure = ex;
-                if (attempt == maxAttempts) throw ex;
-                Thread.sleep(Math.min(60000L, 3000L * (1L << (attempt - 1))));
+                Thread.sleep(Math.min(60000L, 3000L * (1L << (int) Math.min(attempt - 1, 4L))));
             }
         }
         if (pendingResponse == null) {
@@ -577,7 +523,7 @@ public class Main {
             if ("MAX_TOKENS".equals(finish)) {
                 String usage = root.has("usageMetadata") ? root.getAsJsonObject("usageMetadata").toString() : "اطلاعات مصرف توکن در دسترس نیست";
                 throw new IllegalStateException("پاسخ AI به سقف خروجی رسید (MAX_TOKENS)؛ هیچ فایل ناقصی ثبت نشد. جزئیات مصرف: " + usage
-                        + ". درخواست را به چند مرحله کوچک‌تر تقسیم کنید یا تعداد فایل‌های هدف را محدود کنید.");
+                        + ". پاسخ باید به بخش‌های کوچک‌تر تقسیم شود؛ این محدودیت از سقف خروجی مدل است، نه محدودیت تنظیم‌شده در Robat2.");
             }
             JsonArray responseParts = candidate.getAsJsonObject("content").getAsJsonArray("parts");
             StringBuilder text = new StringBuilder();
