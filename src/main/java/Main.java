@@ -157,10 +157,16 @@ public class Main {
         if (p.waitFor() != 0) throw new IllegalStateException("خواندن فهرست فایل‌های پروژه ناموفق بود.");
         List<String> result = new ArrayList<>();
         for (String path : new String(bytes, StandardCharsets.UTF_8).split("\\u0000")) {
-            if (isAllowedPath(path)) result.add(path);
+            if (isReadablePath(path)) result.add(path);
             if (result.size() >= MAX_FILES) break;
         }
         return result;
+    }
+
+    private static boolean isReadablePath(String path) {
+        if (path != null && path.startsWith(".github/workflows/")
+                && (path.endsWith(".yml") || path.endsWith(".yaml"))) return true;
+        return isAllowedPath(path);
     }
 
     private static boolean isAllowedPath(String path) {
