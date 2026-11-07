@@ -60,6 +60,12 @@ public class Main {
             pull.comment("✍️ درخواست را بعد از /fix بنویسید؛ برای بررسی کامل پروژه فقط /audit را ارسال کنید.");
             return;
         }
+        // Build-only mode lets a maintainer rerun Android packaging after a code fix
+        // without asking Gemini to generate another full-project patch.
+        if (!auditMode && requestText.equalsIgnoreCase("build-only")) {
+            pull.comment("✅ حالت ساخت بدون تغییر کد فعال شد؛ مرحله هوش مصنوعی رد می‌شود و GitHub Actions ساخت APKها را ادامه می‌دهد.");
+            return;
+        }
 
         List<String> paths = listProjectFiles(targetDir);
         if (paths.isEmpty()) {
