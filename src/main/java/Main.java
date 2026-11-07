@@ -420,8 +420,9 @@ public class Main {
     private static boolean isPermanentQuotaError(String errorBody) {
         String message = errorBody == null ? "" : errorBody.toLowerCase(Locale.ROOT);
         boolean quotaMentioned = message.contains("quota") || message.contains("resource_exhausted");
-        boolean dailyLimit = message.contains("per_day") || message.contains("per day")
-                || message.contains("daily") || message.contains("per 24 hours");
+        boolean dailyLimit = message.contains("per_day") || message.contains("perday")
+                || message.contains("per day") || message.contains("daily")
+                || message.contains("per 24 hours");
         boolean accountLimit = message.contains("limit: 0") || message.contains("billing")
                 || message.contains("payment required") || message.contains("insufficient balance");
         // RESOURCE_EXHAUSTED alone can describe a temporary rate limit; do not treat it
