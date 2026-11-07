@@ -89,12 +89,12 @@ public class Main {
             String buildCheck;
             try {
                 validateProject(targetDir);
-                buildCheck = "\\n\\n### نتیجه تست و ساخت\\n- تست Maven و ساخت APKهای اندروید با موفقیت انجام شد.";
+                buildCheck = "\n\n### نتیجه تست و ساخت\n- تست Maven و ساخت APKهای اندروید با موفقیت انجام شد.";
             } catch (Exception buildError) {
-                buildCheck = "\\n\\n### نتیجه تست و ساخت\\n- **نیازمند بررسی:** " + buildError.getMessage();
+                buildCheck = "\n\n### نتیجه تست و ساخت\n- **نیازمند بررسی:** " + buildError.getMessage();
             }
-            pull.comment("## 🔎 گزارش بررسی کامل Wallet-Rescue-V2\\n\\n" + audit.get("summary").getAsString()
-                    + buildCheck + "\\n\\n_گزارش بر اساس فایل‌های مخزن و نتیجه اجرای تست/ساخت است؛ بازبینی انسانی قبل از ادغام لازم است._");
+            pull.comment("## 🔎 گزارش بررسی کامل Wallet-Rescue-V2\n\n" + audit.get("summary").getAsString()
+                    + buildCheck + "\n\n_گزارش بر اساس فایل‌های مخزن و نتیجه اجرای تست/ساخت است؛ بازبینی انسانی قبل از ادغام لازم است._");
             return;
         }
         pull.comment("🤖 درخواست دریافت شد. در حال تحلیل پروژه و پیاده‌سازی تغییرات در چند فایل مرتبط هستم...");
