@@ -85,8 +85,12 @@ public class Main {
                 case 2 -> "سطح ۲ - مهندس خودکار: زمینه مرتبط مخزن و وابستگی‌ها را تحلیل کن، تغییرات چندفایلی هماهنگ بده، کنترل‌های امنیتی و تست‌ها را اجرا کن، خطاهای واقعی را حداکثر دو دور اصلاح کن و فقط نتیجه تأییدشده را گزارش کن.";
                 default -> "سطح ۳ - دستیار توسعه مستقل: هدف را به مراحل طراحی، پیاده‌سازی، تست، اصلاح، مستندسازی و آماده‌سازی انتشار تقسیم کن؛ همه مراحل ممکن در همین مخزن و مجوزهای موجود را انجام بده، وابستگی‌ها و اثرات جانبی را بررسی کن، نتیجه هر مرحله را اعتبارسنجی کن و موارد نیازمند کلید، هزینه، دسترسی بیرونی یا تأیید انسانی را متوقف و شفاف اعلام کن. عملیات حساس یا انتشار بیرونی بدون تأیید صریح ممنوع است.";
             };
-            modelRequest = "پروفایل اجرای انتخاب‌شده:\\n" + profile
-                    + "\\n\\nدستور کاربر:\\n" + modelRequest;
+            int maxEditsPerPass = autonomyLevel == 1 ? 3 : 6;
+            int maxRepairAttempts = autonomyLevel == 1 ? 1 : autonomyLevel == 2 ? 2 : 3;
+            modelRequest = "پروفایل اجرای انتخاب‌شده:\n" + profile
+                    + "\n\nحداکثر فایل در هر مرحله: " + maxEditsPerPass
+                    + "؛ حداکثر تلاش اصلاح پس از شکست تست: " + maxRepairAttempts
+                    + "\n\nدستور کاربر:\n" + modelRequest;
         }
         // Build-only mode lets a maintainer rerun Android packaging after a code fix
         // without asking Gemini to generate another full-project patch.
@@ -147,7 +151,7 @@ public class Main {
                     + answer.get("summary").getAsString() + "\n\n" + formatPlan(answer.getAsJsonArray("plan")));
             return;
         }
-        if (edits.size() > 6) throw new IllegalStateException("تعداد فایل‌های خروجی بیش از حد مجاز است (حداکثر ۶ فایل در هر مرحله).");
+        if (edits.size() > maxEditsPerPass) throw new IllegalStateException("تعداد فایل‌های خروجی بیش از حد مجاز برای سطح انتخاب‌شده است.");
 
         List<String> changed = new ArrayList<>();
         int repairAttempt = 0;
@@ -178,8 +182,8 @@ public class Main {
                 run(targetDir, "git", "diff", "--check");
                 validateProject(targetDir);
             } catch (Exception validationError) {
-                if (repairAttempt >= 2) {
-                    throw new IllegalStateException("پس از ۳ دور پیاده‌سازی/اصلاح، تست پروژه همچنان ناموفق بود. آخرین خطا: "
+                if (repairAttempt >= maxRepairAttempts) {
+                    throw new IllegalStateException("پس از " + (maxRepairAttempts + 1) + " دور پیاده‌سازی/اصلاح، تست پروژه همچنان ناموفق بود. آخرین خطا: "
                             + validationError.getMessage(), validationError);
                 }
                 repairAttempt++;
@@ -195,8 +199,8 @@ public class Main {
                 if (edits == null || edits.isEmpty())
                     throw new IllegalStateException("هوش مصنوعی برای اصلاح خطای تست، تغییر معتبری ارائه نکرد: "
                             + validationError.getMessage());
-                if (edits.size() > 6)
-                    throw new IllegalStateException("تعداد فایل‌های اصلاحی بیش از حد مجاز است (حداکثر ۶ فایل در هر مرحله).");
+                if (edits.size() > maxEditsPerPass)
+                    throw new IllegalStateException("تعداد فایل‌های اصلاحی بیش از حد مجاز برای سطح انتخاب‌شده است.");
                 continue;
             }
 
