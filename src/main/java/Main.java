@@ -339,7 +339,18 @@ public class Main {
                 Map.entry("شبکه", List.of("network", "chain")),
                 Map.entry("رابط", List.of("ui", "activity", "layout")),
                 Map.entry("اندروید", List.of("android", "gradle")),
-                Map.entry("امنیت", List.of("security", "crypto"))
+                Map.entry("امنیت", List.of("security", "crypto")),
+                Map.entry("عبارت بازیابی", List.of("mnemonic", "seed", "bip39", "recovery")),
+                Map.entry("کلید خصوصی", List.of("private", "key", "secret", "crypto")),
+                Map.entry("بازیابی", List.of("recovery", "restore", "backup")),
+                Map.entry("پشتیبان", List.of("backup", "restore")),
+                Map.entry("بکاپ", List.of("backup", "restore")),
+                Map.entry("رمزگذاری", List.of("encryption", "security", "storage")),
+                Map.entry("تولید", List.of("generate", "generator", "create")),
+                Map.entry("آزمایش", List.of("test", "testing")),
+                Map.entry("خطا", List.of("error", "exception", "bug")),
+                Map.entry("دانلود", List.of("artifact", "download", "apk")),
+                Map.entry("تراست ولت", List.of("trustwallet", "wallet"))
         );
         StringBuilder expanded = new StringBuilder(normalizedRequest);
         for (Map.Entry<String, List<String>> alias : aliases.entrySet()) {
