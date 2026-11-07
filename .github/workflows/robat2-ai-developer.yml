@@ -83,6 +83,7 @@ jobs:
           name: Robat2-APK
           path: target/robat2app/build/outputs/apk/debug/robat2app-debug.apk
           if-no-files-found: error
+          retention-days: 30
 
       - name: Report AI failure without hiding it
         if: steps.ai.outcome == 'failure'
@@ -92,12 +93,17 @@ jobs:
             await github.rest.issues.createComment({
               ...context.repo,
               issue_number: context.issue.number,
-              body: "⚠️ **Robat2 نتوانست درخواست هوش مصنوعی را کامل کند.** ساخت APK جداگانه ادامه یافت و اگر موفق باشد فایل‌ها در بخش Artifacts موجودند. اجرای workflow در پایان ناموفق علامت‌گذاری می‌شود تا خطای AI پنهان نماند. گزارش دقیق خطا را در بخش Run AI Developer همین اجرا ببینید."
+              body: "⚠️ **اجرای هوش مصنوعی Robat2 ناموفق بود.** ساخت و بررسی APKها مستقل ادامه یافت. وضعیت سبز Workflow فقط موفقیت ساخت و بارگذاری را نشان می‌دهد و به معنی موفقیت درخواست AI نیست. جزئیات خطای AI را در مرحله Run AI Developer ببینید."
             });
 
-      - name: Mark AI failure as workflow failure
-        if: steps.ai.outcome == 'failure'
+      - name: Summarize AI result without failing APK build
+        if: always()
+        shell: bash
         run: |
-          echo "Robat2 AI execution failed. APK packaging was still attempted."
-          exit 1
+          if [ "${{ steps.ai.outcome }}" = "failure" ]; then
+            echo "⚠️ **Robat2 AI execution failed. APK packaging was attempted independently.**" >> "$GITHUB_STEP_SUMMARY"
+            echo "AI failed; APK packaging result is reported by the build and verification steps."
+          else
+            echo "✅ **Robat2 AI execution completed successfully.**" >> "$GITHUB_STEP_SUMMARY"
+          fi
           retention-days: 30
