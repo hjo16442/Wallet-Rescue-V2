@@ -94,9 +94,28 @@ public class Main {
             answer = askForProjectEdits(project, repairRequest, geminiKey, model);
             JsonArray edits = answer.getAsJsonArray("edits");
             if (edits == null || edits.isEmpty()) {
-                pull.comment("ℹ️ پس از بررسی پروژه، تغییر قابل اعمالی تولید نشد. توضیح: "
-                        + answer.get("summary").getAsString());
-                return;
+                if (allChanged.isEmpty()) {
+                    pull.comment("ℹ️ پس از بررسی پروژه، تغییر قابل اعمالی تولید نشد. توضیح: "
+                            + answer.get("summary").getAsString());
+                    return;
+                }
+                try {
+                    run(targetDir, "git", "diff", "--check");
+                    validateProject(targetDir);
+                    changed.clear();
+                    changed.addAll(allChanged);
+                    validated = true;
+                    break;
+                } catch (Exception failure) {
+                    if (attempt == 3)
+                        throw new IllegalStateException("پس از ۳ دور اصلاح، تست‌ها هنوز ناموفق‌اند؛ هیچ تغییری push نشد. آخرین خطا: "
+                                + failure.getMessage(), failure);
+                    repairRequest = requestText + "\\n\\nThe previous code edits are already present. "
+                            + "The latest response contained no edits, but validation still failed. "
+                            + "You MUST repair the build failure. Details:\\n" + failure.getMessage();
+                    pull.comment("⚠️ تست‌ها هنوز خطا دارند؛ ربات یک دور دیگر برای اصلاح تلاش می‌کند.");
+                    continue;
+                }
             }
             if (edits.size() > 20) throw new IllegalStateException("تعداد فایل‌های خروجی بیش از حد مجاز است.");
 
