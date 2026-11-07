@@ -22,7 +22,7 @@ public class Main {
         String token = env("GITHUB_TOKEN");
         String geminiKey = env("GEMINI_API_KEY");
         String model = Optional.ofNullable(System.getenv("GEMINI_MODEL"))
-                .filter(s -> !s.isBlank()).orElse("gemini-2.5-flash");
+                .filter(s -> !s.isBlank()).orElse("gemini-3.8-flash");
         Path targetDir = Paths.get(env("TARGET_DIR")).toAbsolutePath().normalize();
         if (!Files.isDirectory(targetDir) || !Files.isDirectory(targetDir.resolve(".git")))
             throw new IllegalStateException("TARGET_DIR باید پوشه checkout شده Git باشد.");
