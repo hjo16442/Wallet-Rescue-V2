@@ -417,6 +417,51 @@ public class Main {
         return resolved;
     }
 
+    private static boolean isPermanentQuotaError(String errorBody) {
+        String message = errorBody == null ? "" : errorBody.toLowerCase(Locale.ROOT);
+        boolean quotaMentioned = message.contains("quota") || message.contains("resource_exhausted");
+        boolean dailyLimit = message.contains("per_day") || message.contains("per day")
+                || message.contains("daily") || message.contains("per 24 hours");
+        boolean accountLimit = message.contains("limit: 0") || message.contains("billing")
+                || message.contains("payment required") || message.contains("insufficient balance");
+        // RESOURCE_EXHAUSTED alone can describe a temporary rate limit; do not treat it
+        // as a permanent exhausted daily quota without an explicit quota/account signal.
+        return accountLimit || (quotaMentioned && dailyLimit);
+    }
+
+    private static long parseRetryAfterSeconds(String retryAfter, String errorBody) {
+        if (retryAfter != null && !retryAfter.isBlank()) {
+            try {
+                return Math.max(0L, Long.parseLong(retryAfter.trim()));
+            } catch (NumberFormatException ignored) {
+                try {
+                    java.time.Instant retryAt = java.time.ZonedDateTime.parse(
+                            retryAfter.trim(), java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant();
+                    return Math.max(0L, java.time.Duration.between(java.time.Instant.now(), retryAt).getSeconds());
+                } catch (Exception ignoredDate) { }
+            }
+        }
+        if (errorBody != null && !errorBody.isBlank()) {
+            try {
+                JsonObject root = JsonParser.parseString(errorBody).getAsJsonObject();
+                JsonObject error = root.has("error") && root.get("error").isJsonObject()
+                        ? root.getAsJsonObject("error") : root;
+                if (error.has("details") && error.get("details").isJsonArray()) {
+                    for (JsonElement detail : error.getAsJsonArray("details")) {
+                        if (!detail.isJsonObject()) continue;
+                        JsonObject item = detail.getAsJsonObject();
+                        if (item.has("retryDelay")) {
+                            String delay = item.get("retryDelay").getAsString().trim().toLowerCase(Locale.ROOT);
+                            if (delay.endsWith("s"))
+                                return Math.max(0L, (long) Math.ceil(Double.parseDouble(delay.substring(0, delay.length() - 1))));
+                        }
+                    }
+                }
+            } catch (Exception ignored) { }
+        }
+        return -1L;
+    }
+
     private static JsonObject askForProjectEdits(Map<String, String> project, String userRequest,
                                                   String key, String model) throws Exception {
         StringBuilder context = new StringBuilder();
@@ -467,57 +512,39 @@ public class Main {
         Response pendingResponse = null;
         Exception networkFailure = null;
         int lastStatus = -1;
-        final int maxAttempts = 3;
+        final int maxAttempts = 5;
         for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-            long retryAfterSeconds = -1L;
             try {
                 pendingResponse = HTTP.newCall(request).execute();
                 int status = pendingResponse.code();
                 if (pendingResponse.isSuccessful() || !Set.of(429, 500, 502, 503, 504).contains(status)) break;
 
                 lastStatus = status;
-                String retryAfter = pendingResponse.header("Retry-After");
-                if (retryAfter != null) {
-                    try { retryAfterSeconds = Math.max(0L, Long.parseLong(retryAfter.trim())); }
-                    catch (NumberFormatException ignored) { }
-                }
                 String errorBody = pendingResponse.body() == null ? "" : pendingResponse.body().string();
+                long retryAfterSeconds = parseRetryAfterSeconds(pendingResponse.header("Retry-After"), errorBody);
                 pendingResponse.close();
                 pendingResponse = null;
 
-                String lowerError = errorBody.toLowerCase(Locale.ROOT);
-                if (status == 429) {
-                    boolean quotaExhausted = lowerError.contains("quota")
-                            || lowerError.contains("per_day")
-                            || lowerError.contains("daily")
-                            || lowerError.contains("billing")
-                            || lowerError.contains("payment")
-                            || lowerError.contains("limit: 0")
-                            || lowerError.contains("resource_exhausted");
-                    if (quotaExhausted)
-                        throw new IllegalStateException("سهمیه Gemini تمام شده یا محدودیت حساب/پرداخت وجود دارد؛ درخواست تکراری ارسال نشد. جزئیات: "
-                                + errorBody.substring(0, Math.min(700, errorBody.length())));
-                    if (retryAfterSeconds < 0)
-                        throw new IllegalStateException("Gemini محدودیت نرخ HTTP 429 اعلام کرد اما Retry-After نفرستاد؛ برای جلوگیری از درخواست‌های بی‌فایده، تلاش مجدد متوقف شد. جزئیات: "
-                                + errorBody.substring(0, Math.min(500, errorBody.length())));
-                    if (retryAfterSeconds > 300)
-                        throw new IllegalStateException("Gemini برای HTTP 429 زمان انتظار " + retryAfterSeconds
-                                + " ثانیه اعلام کرد؛ اجرای خودکار متوقف شد تا workflow بی‌جهت معطل نماند. بعداً دوباره اجرا کنید.");
-                    if (attempt == maxAttempts)
-                        throw new IllegalStateException("Gemini پس از " + maxAttempts + " تلاش هنوز HTTP 429 می‌دهد؛ بعداً دوباره اجرا کنید.");
-                    Thread.sleep(retryAfterSeconds * 1000L);
-                    continue;
+                if (status == 429 && isPermanentQuotaError(errorBody)) {
+                    throw new IllegalStateException("سهمیه روزانه Gemini یا محدودیت پرداخت/حساب تمام شده است؛ برای جلوگیری از مصرف بیهوده، درخواست تکرار نشد. جزئیات: "
+                            + errorBody.substring(0, Math.min(700, errorBody.length())));
                 }
-
-                if (attempt == maxAttempts)
+                if (attempt == maxAttempts) {
                     throw new IllegalStateException("Gemini پس از " + maxAttempts + " تلاش با HTTP " + status
                             + " پاسخ نداد. جزئیات: " + errorBody.substring(0, Math.min(500, errorBody.length())));
-                long backoffMillis = 3000L * (1L << (attempt - 1));
-                Thread.sleep(backoffMillis);
+                }
+
+                long backoffSeconds = Math.min(60L, 3L * (1L << (attempt - 1)));
+                long waitSeconds = retryAfterSeconds >= 0 ? retryAfterSeconds : backoffSeconds;
+                if (waitSeconds > 300L) {
+                    throw new IllegalStateException("Gemini برای HTTP " + status + " زمان انتظار "
+                            + waitSeconds + " ثانیه اعلام کرده است؛ اجرای مجدد خودکار از سقف ۵ دقیقه بیشتر نمی‌شود. بعداً دوباره تلاش کنید.");
+                }
+                Thread.sleep(waitSeconds * 1000L);
             } catch (java.io.IOException ex) {
                 networkFailure = ex;
                 if (attempt == maxAttempts) throw ex;
-                Thread.sleep(3000L * (1L << (attempt - 1)));
+                Thread.sleep(Math.min(60000L, 3000L * (1L << (attempt - 1))));
             }
         }
         if (pendingResponse == null) {
