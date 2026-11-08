@@ -503,26 +503,12 @@ public class Main {
 
     // Try the configured primary Gemini model first, then stable fallback models.
     // This helps with transient 503 overload and model-specific 429 quotas.
+    // OpenRouter is now the primary AI provider. Gemini is intentionally removed
+    // from the execution path to avoid the exhausted Gemini free-tier quota.
+    // Other configured OpenAI-compatible providers remain optional fallbacks.
     private static JsonObject askForProjectEdits(Map<String, String> project, String userRequest,
                                                   String key, String model) throws Exception {
         List<String> failures = new ArrayList<>();
-        if (key != null && !key.isBlank()) {
-            try {
-                System.out.println("Robat2 AI: trying Gemini primary/fallback models");
-                JsonObject answer = askForProjectEditsWithModel(project, userRequest, key, model);
-                System.out.println("Robat2 AI: succeeded with Gemini");
-                return answer;
-            } catch (Exception ex) {
-                String message = ex.getMessage() == null ? ex.toString() : ex.getMessage();
-                failures.add("Gemini: " + message);
-                System.err.println("Robat2 AI: Gemini unavailable: " + message);
-            }
-        } else {
-            failures.add("Gemini: GEMINI_API_KEY تنظیم نشده است");
-        }
-
-        // Optional independent providers. They are tried only when their secrets exist.
-        // No API key is hard-coded, logged, or sent to the repository.
         List<String> order = new ArrayList<>();
         String configuredOrder = System.getenv("AI_PROVIDER_ORDER");
         if (configuredOrder == null || configuredOrder.isBlank())
@@ -566,6 +552,7 @@ public class Main {
             if (providerKey == null || providerKey.isBlank() || endpoint == null || endpoint.isBlank()
                     || providerModel == null || providerModel.isBlank()) {
                 System.out.println("Robat2 AI: provider " + provider + " skipped (credentials/config not set)");
+                failures.add(provider + ": credentials/config not set");
                 continue;
             }
             try {
@@ -580,10 +567,11 @@ public class Main {
                 System.err.println("Robat2 AI: provider " + provider + " failed: " + message);
             }
         }
-        throw new IllegalStateException("هیچ ارائه‌دهنده هوش مصنوعیِ دارای دسترسی نتوانست درخواست را اجرا کند. "
-                + "برای فعال‌شدن جایگزین‌ها، کلید یکی از OPENROUTER_API_KEY، OPENAI_API_KEY، GROQ_API_KEY "
-                + "یا تنظیمات AI_API_KEY/AI_API_BASE_URL را در GitHub Actions Secrets قرار دهید. "
-                + "هیچ کلیدی در کد ثبت نشده است. جزئیات: " + String.join(" | ", failures));
+        throw new IllegalStateException("اجرای درخواست AI ناموفق بود. Gemini از مسیر اجرا حذف شده است. "
+                + "برای فعال‌شدن Robat2، کلید OPENROUTER_API_KEY را در GitHub Actions Secrets ثبت کنید؛ "
+                + "در صورت نیاز ارائه‌دهنده‌های جایگزین OPENAI_API_KEY، GROQ_API_KEY یا AI_API_KEY/AI_API_BASE_URL "
+                + "نیز قابل تنظیم هستند. هیچ کلیدی در کد ثبت نشده است. جزئیات: "
+                + String.join(" | ", failures));
     }
 
     private static JsonObject askOpenAiCompatible(Map<String, String> project, String userRequest,
