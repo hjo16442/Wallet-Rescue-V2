@@ -743,7 +743,7 @@ public class Main {
 
     private static boolean isGeneratedBuildPath(String path) {
         if (path == null || path.isBlank()) return false;
-        String normalized = path.replace('\\\\', '/');
+        String normalized = path;
         if (normalized.equals("target") || normalized.startsWith("target/")) return true;
         for (String segment : normalized.split("/")) {
             if (segment.equals(".gradle") || segment.equals("build")) return true;
