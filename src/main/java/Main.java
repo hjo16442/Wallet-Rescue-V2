@@ -282,8 +282,9 @@ public class Main {
         for (String path : new String(bytes, StandardCharsets.UTF_8).split("\\u0000")) {
             if (isReadablePath(path)) result.add(path);
         }
-        // Rank files by both implementation importance and relevance to the user's request.
-        // This prevents the fixed file limit from hiding the most relevant module in large repos.
+        // Keep the complete tracked text-file list available to the agent. The former
+        // implicit top-N truncation made cross-module requests silently miss files.
+        // Relevance ranking remains useful for context ordering, but does not discard files.
         result.sort(Comparator.comparingInt((String path) -> relevanceScore(path, request)).reversed()
                 .thenComparingInt(Main::filePriority).thenComparing(String::compareTo));
         return result;
@@ -439,6 +440,12 @@ public class Main {
                     .append(entry.getValue()).append("\n--- END FILE ---\n");
         }
         String prompt = """
+                You are a repository engineering agent. The context may be large; inspect all
+                provided files relevant to the task, and do not claim to have reviewed files
+                that were not supplied. If a required file is absent from context, report it
+                explicitly instead of inventing its contents.
+                """;
+        String detailedPrompt = """
                 You are an autonomous senior software engineer working on the user's repository.
                 Execution profiles are supplied in USER REQUEST: Level 1 means focused implementation and validation;
                 Level 2 means repository-wide multi-file engineering, security checks, and persistent repair until validated;
@@ -470,7 +477,7 @@ public class Main {
                 USER REQUEST:
                 """ + userRequest + "\n\nPROJECT FILES:\n" + context;
 
-        JsonObject part = new JsonObject(); part.addProperty("text", prompt);
+        JsonObject part = new JsonObject(); part.addProperty("text", detailedPrompt);
         JsonArray parts = new JsonArray(); parts.add(part);
         JsonObject content = new JsonObject(); content.add("parts", parts);
         JsonArray contents = new JsonArray(); contents.add(content);
