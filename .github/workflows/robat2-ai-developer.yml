@@ -50,8 +50,6 @@ jobs:
         working-directory: target
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_MODEL: gemini-3.8-flash
           AI_PROVIDER_ORDER: ${{ vars.AI_PROVIDER_ORDER || 'openrouter,openai,groq,custom' }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
