@@ -110,7 +110,7 @@ jobs:
               const raw = fs.readFileSync('robat2-ai.log', 'utf8');
               details = raw.slice(-7000)
                 .replace(/AIza[0-9A-Za-z_-]{20,}/g, '[REDACTED_API_KEY]')
-                .replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g, '[REDACTED_GITHUB_TOKEN]');
+                .replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g, '[REDACTED_GITHUB_TOKEN]')
                 .replace(/sk-[A-Za-z0-9_-]{20,}/g, '[REDACTED_PROVIDER_KEY]')
                 .replace(/Bearer\\s+[A-Za-z0-9._-]{20,}/gi, 'Bearer [REDACTED]')
                 .replace(/sk-or-v1-[A-Za-z0-9]{20,}/g, '[REDACTED_OPENROUTER_KEY]');
@@ -137,8 +137,10 @@ jobs:
           if [ "${{ steps.ai.outcome }}" = "failure" ]; then
             echo "❌ **Robat2 AI execution failed. APK packaging was attempted independently.**" >> "$GITHUB_STEP_SUMMARY"
             echo "AI failed; APK packaging result is reported by the build and verification steps."
+          elif [ "${{ github.event.comment.body }}" = "/fix build-only" ]; then
+            echo "ℹ️ **Robat2 AI was intentionally bypassed (build-only request).**" >> "$GITHUB_STEP_SUMMARY"
           elif [ "${{ steps.ai.outcome }}" = "skipped" ]; then
-            echo "ℹ️ **Robat2 AI step was skipped (build-only mode).**" >> "$GITHUB_STEP_SUMMARY"
+            echo "ℹ️ **Robat2 AI step was skipped.**" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "✅ **Robat2 AI execution completed successfully.**" >> "$GITHUB_STEP_SUMMARY"
           fi
