@@ -678,8 +678,8 @@ public class Main {
     private static String buildDetailedPrompt(Map<String, String> project, String userRequest) {
         StringBuilder context = new StringBuilder();
         for (Map.Entry<String, String> entry : project.entrySet()) {
-            context.append("\\n--- FILE: ").append(entry.getKey()).append(" ---\\n")
-                    .append(entry.getValue()).append("\\n--- END FILE ---\\n");
+            context.append("\n--- FILE: ").append(entry.getKey()).append(" ---\n")
+                    .append(entry.getValue()).append("\n--- END FILE ---\n");
         }
         return """
                 You are an autonomous senior software engineer working on the user's repository.
@@ -695,7 +695,7 @@ public class Main {
                 Implement every feasible requirement. Do not silently omit necessary files. Keep each edited file complete.
                 Escape JSON strings correctly and do not use markdown fences.
                 USER REQUEST:
-                """ + userRequest + "\\n\\nPROJECT FILES:\\n" + context;
+                """ + userRequest + "\n\nPROJECT FILES:\n" + context;
     }
 
     private static JsonObject askForProjectEditsWithModel(Map<String, String> project, String userRequest,
