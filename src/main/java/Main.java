@@ -201,8 +201,8 @@ public class Main {
                     throw new IllegalStateException("پس از اعمال تغییرات، diff خالی است؛ بررسی مستقل متوقف شد.");
                 String reviewRequest = "بازبینی مستقل و سخت‌گیرانه تغییرات انجام بده. درخواست اصلی کاربر: "
                         + modelRequest
-                        + "\\n\\nDIFF واقعی تغییرات اعمال‌شده:\\n" + patch
-                        + "\\n\\nفایل‌های فعلی پروژه نیز در زمینه تو هستند. فقط خطاهای واقعی و قابل اثبات را بررسی کن: "
+                        + "\n\nDIFF واقعی تغییرات اعمال‌شده:\n" + patch
+                        + "\n\nفایل‌های فعلی پروژه نیز در زمینه تو هستند. فقط خطاهای واقعی و قابل اثبات را بررسی کن: "
                         + "اشکال منطقی، رگرسیون نسبت به رفتار قبلی، نقص امنیتی، ورودی کنترل‌نشده، مدیریت خطا، "
                         + "ناسازگاری API/نسخه، و تست ناکافی. موارد سلیقه‌ای یا حدس را ایراد اعلام نکن. "
                         + "اگر هیچ مانع مهمی وجود ندارد summary را دقیقاً با PASS: شروع کن. "
@@ -681,7 +681,7 @@ public class Main {
         if (exitCode != 0) {
             String tail = output.length() > 9000 ? output.substring(output.length() - 9000) : output;
             throw new IllegalStateException("دستور دریافت diff ناموفق بود (کد " + exitCode + "): "
-                    + String.join(" ", command) + "\\n" + tail);
+                    + String.join(" ", command) + "\n" + tail);
         }
         return output;
     }
@@ -695,8 +695,8 @@ public class Main {
         if (exitCode != 0) {
             String tail = output.length() > 9000 ? output.substring(output.length() - 9000) : output;
             throw new IllegalStateException("دستور ناموفق بود (کد " + exitCode + "): "
-                    + String.join(" ", command) + "\\n" + tail
-                    + "\\nهیچ commit/push انجام نشد.");
+                    + String.join(" ", command) + "\n" + tail
+                    + "\nهیچ commit/push انجام نشد.");
         }
     }
 }
