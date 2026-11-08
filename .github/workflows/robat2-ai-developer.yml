@@ -52,6 +52,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: gemini-3.8-flash
+          AI_PROVIDER_ORDER: ${{ vars.AI_PROVIDER_ORDER || 'openrouter,openai,groq,custom' }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_MODEL: ${{ vars.OPENROUTER_MODEL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GROQ_MODEL: ${{ vars.GROQ_MODEL }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_API_BASE_URL: ${{ vars.AI_API_BASE_URL }}
+          AI_MODEL: ${{ vars.AI_MODEL }}
           GITHUB_EVENT_PATH: ${{ github.event_path }}
           TARGET_DIR: .
         id: ai
@@ -101,6 +111,9 @@ jobs:
               details = raw.slice(-7000)
                 .replace(/AIza[0-9A-Za-z_-]{20,}/g, '[REDACTED_API_KEY]')
                 .replace(/gh[pousr]_[A-Za-z0-9_]{20,}/g, '[REDACTED_GITHUB_TOKEN]');
+                .replace(/sk-[A-Za-z0-9_-]{20,}/g, '[REDACTED_PROVIDER_KEY]')
+                .replace(/Bearer\\s+[A-Za-z0-9._-]{20,}/gi, 'Bearer [REDACTED]')
+                .replace(/sk-or-v1-[A-Za-z0-9]{20,}/g, '[REDACTED_OPENROUTER_KEY]');
               details = details.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             } catch (error) {
               details = String(error.message || error);
