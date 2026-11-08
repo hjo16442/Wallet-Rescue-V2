@@ -727,6 +727,10 @@ public class Main {
             actual.addAll(readGitPaths(dir, "git", "diff", "--name-only", "--"));
             actual.addAll(readGitPaths(dir, "git", "ls-files", "--others", "--exclude-standard"));
         }
+        // Validation builds create untracked Gradle/Maven outputs. They are not
+        // source edits and must not make the AI patch scope check fail.
+        actual.removeIf(Main::isGeneratedBuildPath);
+        expected.removeIf(Main::isGeneratedBuildPath);
         if (!actual.equals(expected)) {
             Set<String> unexpected = new LinkedHashSet<>(actual);
             unexpected.removeAll(expected);
@@ -735,6 +739,16 @@ public class Main {
             throw new IllegalStateException("کنترل نهایی محدوده تغییرات ناموفق بود؛ هیچ commit/push انجام نشد. "
                     + "فایل‌های غیرمنتظره: " + unexpected + "؛ فایل‌های مورد انتظارِ غایب: " + missing);
         }
+    }
+
+    private static boolean isGeneratedBuildPath(String path) {
+        if (path == null || path.isBlank()) return false;
+        String normalized = path.replace('\\\\', '/');
+        if (normalized.equals("target") || normalized.startsWith("target/")) return true;
+        for (String segment : normalized.split("/")) {
+            if (segment.equals(".gradle") || segment.equals("build")) return true;
+        }
+        return false;
     }
 
     private static Set<String> readGitPaths(Path dir, String... command) throws Exception {
