@@ -722,9 +722,9 @@ public class Main {
         Set<String> expected = new LinkedHashSet<>(expectedPaths);
         Set<String> actual = new LinkedHashSet<>();
         if (staged) {
-            actual.addAll(readGitPaths(dir, "diff", "--cached", "--name-only", "--"));
+            actual.addAll(readGitPaths(dir, "git", "diff", "--cached", "--name-only", "--"));
         } else {
-            actual.addAll(readGitPaths(dir, "diff", "--name-only", "--"));
+            actual.addAll(readGitPaths(dir, "git", "diff", "--name-only", "--"));
             actual.addAll(readGitPaths(dir, "ls-files", "--others", "--exclude-standard"));
         }
         if (!actual.equals(expected)) {
