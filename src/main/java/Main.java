@@ -669,11 +669,21 @@ public class Main {
             if (text.toString().trim().isEmpty())
                 throw new IllegalStateException("Gemini متن خروجی معتبری برنگرداند؛ هیچ تغییری اعمال نشد.");
             JsonElement parsed;
+            String modelJson = text.toString().trim();
             try {
-                parsed = JsonParser.parseString(text.toString().trim());
+                parsed = JsonParser.parseString(modelJson);
             } catch (RuntimeException malformedJson) {
-                throw new IllegalStateException("JSON خروجی Gemini ناقص یا نامعتبر است؛ هیچ فایلی تغییر نکرد: "
-                        + malformedJson.getMessage(), malformedJson);
+                // Models sometimes emit source-code backslashes (for example \\s or \\d)
+                // without JSON escaping them inside edits[].content. Repair only invalid
+                // escapes inside JSON strings; valid JSON escapes and all file text remain intact.
+                try {
+                    String repaired = escapeInvalidJsonStringEscapes(modelJson);
+                    parsed = JsonParser.parseString(repaired);
+                    System.err.println("Robat2 AI: recovered malformed JSON string escapes from model output.");
+                } catch (RuntimeException stillMalformed) {
+                    throw new IllegalStateException("JSON خروجی Gemini ناقص یا نامعتبر است؛ هیچ فایلی تغییر نکرد: "
+                            + stillMalformed.getMessage(), stillMalformed);
+                }
             }
             if (!parsed.isJsonObject())
                 throw new IllegalStateException("ساختار JSON خروجی AI معتبر نیست؛ هیچ فایلی تغییر نکرد.");
@@ -691,6 +701,64 @@ public class Main {
             }
             return result;
         }
+    }
+
+    /**
+     * Repairs invalid backslash escapes inside JSON string values emitted by LLMs.
+     * JSON permits only \\, \", \\/, \\b, \\f, \\n, \\r, \\t and \\uXXXX.
+     * A source snippet such as \\s must be represented as \\\\s in JSON.
+     * This scanner leaves valid escapes, text outside strings, and file content semantics intact.
+     */
+    private static String escapeInvalidJsonStringEscapes(String json) {
+        StringBuilder out = new StringBuilder(json.length() + 32);
+        boolean inString = false;
+        for (int i = 0; i < json.length(); i++) {
+            char ch = json.charAt(i);
+            if (!inString) {
+                out.append(ch);
+                if (ch == '"') inString = true;
+                continue;
+            }
+            if (ch == '"') {
+                out.append(ch);
+                inString = false;
+                continue;
+            }
+            if (ch != '\\\\') {
+                out.append(ch);
+                continue;
+            }
+            if (i + 1 >= json.length()) {
+                out.append("\\\\");
+                continue;
+            }
+            char next = json.charAt(i + 1);
+            boolean valid = next == '"' || next == '\\\\' || next == '/'
+                    || next == 'b' || next == 'f' || next == 'n'
+                    || next == 'r' || next == 't';
+            if (next == 'u' && i + 5 < json.length()) {
+                valid = true;
+                for (int j = i + 2; j <= i + 5; j++) {
+                    if (Character.digit(json.charAt(j), 16) < 0) {
+                        valid = false;
+                        break;
+                    }
+                }
+                if (valid) {
+                    out.append(json, i, i + 6);
+                    i += 5;
+                    continue;
+                }
+            }
+            if (valid) {
+                out.append(ch).append(next);
+                i++;
+            } else {
+                // Escape the backslash itself; process the following character normally.
+                out.append("\\\\\\\\");
+            }
+        }
+        return out.toString();
     }
 
     private static void validateProject(Path dir) throws Exception {
