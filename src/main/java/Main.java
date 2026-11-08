@@ -227,7 +227,7 @@ public class Main {
                 pull.comment("🛠️ تلاش اصلاح " + repairAttempt + " از " + maxRepairAttempts
                         + ": تست یا ساخت ناموفق شد؛ Robat2 خطا را تحلیل می‌کند و اصلاح مجدد انجام می‌دهد...");
                 String repairPrompt = "درخواست اصلی کاربر و زمینه مکالمه: " + modelRequest
-                        + "\n\nتلاش قبلی کد را تغییر داد اما تست/ساخت شکست خورد. "
+                        + "\n\nتلاش قبلی در بازبینی مستقل، کنترل محدوده تغییرات یا تست/ساخت رد شد. "
                         + "خطای واقعی ابزار: \n" + validationError.getMessage()
                         + "\n\nفایل‌های فعلی پروژه را اصلاح کن تا خطا برطرف شود. "
                         + "تغییرات موفق قبلی را حفظ کن، فقط فایل‌های لازم را اصلاح کن و تست‌ها را خراب نکن.";
@@ -245,11 +245,16 @@ public class Main {
             break;
         }
 
+        // Final scope guard: build tools and model output must not introduce
+        // modified or untracked files outside the explicitly approved patch.
+        verifyExpectedChanges(targetDir, changed, false);
+
         run(targetDir, "git", "config", "user.name", "Robat2 AI Developer");
         run(targetDir, "git", "config", "user.email", "robat2-ai@users.noreply.github.com");
         List<String> add = new ArrayList<>(Arrays.asList("git", "add", "--"));
         add.addAll(changed);
         run(targetDir, add.toArray(new String[0]));
+        verifyExpectedChanges(targetDir, changed, true);
         run(targetDir, "git", "commit", "-m", "AI: implement requested project changes");
         run(targetDir, "git", "push", "origin", "HEAD:refs/heads/" + pull.getHead().getRef());
 
@@ -670,6 +675,35 @@ public class Main {
         String value = System.getenv(name);
         if (value == null || value.isBlank()) throw new IllegalStateException("متغیر محیطی تنظیم نشده: " + name);
         return value;
+    }
+
+    private static void verifyExpectedChanges(Path dir, List<String> expectedPaths,
+                                               boolean staged) throws Exception {
+        Set<String> expected = new LinkedHashSet<>(expectedPaths);
+        Set<String> actual = new LinkedHashSet<>();
+        if (staged) {
+            actual.addAll(readGitPaths(dir, "diff", "--cached", "--name-only", "--"));
+        } else {
+            actual.addAll(readGitPaths(dir, "diff", "--name-only", "--"));
+            actual.addAll(readGitPaths(dir, "ls-files", "--others", "--exclude-standard"));
+        }
+        if (!actual.equals(expected)) {
+            Set<String> unexpected = new LinkedHashSet<>(actual);
+            unexpected.removeAll(expected);
+            Set<String> missing = new LinkedHashSet<>(expected);
+            missing.removeAll(actual);
+            throw new IllegalStateException("کنترل نهایی محدوده تغییرات ناموفق بود؛ هیچ commit/push انجام نشد. "
+                    + "فایل‌های غیرمنتظره: " + unexpected + "؛ فایل‌های مورد انتظارِ غایب: " + missing);
+        }
+    }
+
+    private static Set<String> readGitPaths(Path dir, String... command) throws Exception {
+        String output = runCapture(dir, command);
+        Set<String> paths = new LinkedHashSet<>();
+        for (String line : output.split("\\R")) {
+            if (!line.isEmpty()) paths.add(line);
+        }
+        return paths;
     }
 
     private static String runCapture(Path dir, String... command) throws Exception {
