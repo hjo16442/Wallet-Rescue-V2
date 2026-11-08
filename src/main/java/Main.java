@@ -150,15 +150,37 @@ public class Main {
         // exhaust provider quota, or leave the workflow running until timeout.
         final int maxRepairAttempts = 3;
         while (true) {
+            // Validate the entire model patch before touching the working tree.
+            // A malformed or unsafe later entry must never leave earlier files half-applied.
+            Map<String, String> validatedEdits = new LinkedHashMap<>();
             for (JsonElement element : edits) {
+                if (element == null || !element.isJsonObject())
+                    throw new IllegalStateException("ساختار یکی از تغییرات AI معتبر نیست؛ هیچ فایلی تغییر نکرد.");
                 JsonObject edit = element.getAsJsonObject();
+                if (!edit.has("path") || !edit.get("path").isJsonPrimitive()
+                        || !edit.get("path").getAsJsonPrimitive().isString()
+                        || !edit.has("content") || !edit.get("content").isJsonPrimitive()
+                        || !edit.get("content").getAsJsonPrimitive().isString())
+                    throw new IllegalStateException("هر تغییر AI باید مسیر و محتوای متنی کامل داشته باشد؛ هیچ فایلی تغییر نکرد.");
                 String path = edit.get("path").getAsString();
                 String content = edit.get("content").getAsString();
-                if (!isAllowedPath(path)) throw new IllegalStateException("مسیر فایل غیرمجاز در خروجی AI: " + path);
+                if (!isAllowedPath(path))
+                    throw new IllegalStateException("مسیر فایل غیرمجاز در خروجی AI؛ هیچ فایلی تغییر نکرد: " + path);
+                if (validatedEdits.containsKey(path))
+                    throw new IllegalStateException("مسیر تکراری در خروجی AI؛ هیچ فایلی تغییر نکرد: " + path);
                 Path destination = safeResolve(targetDir, path);
-                if (Files.exists(destination) && !project.containsKey(path))
+                if (Files.exists(destination, LinkOption.NOFOLLOW_LINKS) && !project.containsKey(path))
                     throw new IllegalStateException("AI تلاش کرد فایل خارج از محدوده بررسی را تغییر دهد: " + path);
+                if (Files.isDirectory(destination, LinkOption.NOFOLLOW_LINKS))
+                    throw new IllegalStateException("مسیر مقصد یک پوشه است؛ هیچ فایلی تغییر نکرد: " + path);
+                validatedEdits.put(path, content);
+            }
+
+            for (Map.Entry<String, String> entry : validatedEdits.entrySet()) {
+                String path = entry.getKey();
+                String content = entry.getValue();
                 if (project.containsKey(path) && project.get(path).equals(content)) continue;
+                Path destination = safeResolve(targetDir, path);
                 Files.createDirectories(destination.getParent());
                 Files.writeString(destination, content, StandardCharsets.UTF_8);
                 project.put(path, content);
