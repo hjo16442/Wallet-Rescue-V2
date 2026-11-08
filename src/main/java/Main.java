@@ -179,9 +179,9 @@ public class Main {
                 pull.comment("🛠️ تلاش اصلاح " + repairAttempt + " از " + maxRepairAttempts
                         + ": تست یا ساخت ناموفق شد؛ Robat2 خطا را تحلیل می‌کند و اصلاح مجدد انجام می‌دهد...");
                 String repairPrompt = "درخواست اصلی کاربر و زمینه مکالمه: " + modelRequest
-                        + "\\n\\nتلاش قبلی کد را تغییر داد اما تست/ساخت شکست خورد. "
-                        + "خطای واقعی ابزار: \\n" + validationError.getMessage()
-                        + "\\n\\nفایل‌های فعلی پروژه را اصلاح کن تا خطا برطرف شود. "
+                        + "\n\nتلاش قبلی کد را تغییر داد اما تست/ساخت شکست خورد. "
+                        + "خطای واقعی ابزار: \n" + validationError.getMessage()
+                        + "\n\nفایل‌های فعلی پروژه را اصلاح کن تا خطا برطرف شود. "
                         + "تغییرات موفق قبلی را حفظ کن، فقط فایل‌های لازم را اصلاح کن و تست‌ها را خراب نکن.";
                 answer = askForProjectEdits(project, repairPrompt, geminiKey, model);
                 edits = answer.getAsJsonArray("edits");
@@ -439,12 +439,6 @@ public class Main {
             context.append("\n--- FILE: ").append(entry.getKey()).append(" ---\n")
                     .append(entry.getValue()).append("\n--- END FILE ---\n");
         }
-        String prompt = """
-                You are a repository engineering agent. The context may be large; inspect all
-                provided files relevant to the task, and do not claim to have reviewed files
-                that were not supplied. If a required file is absent from context, report it
-                explicitly instead of inventing its contents.
-                """;
         String detailedPrompt = """
                 You are an autonomous senior software engineer working on the user's repository.
                 Execution profiles are supplied in USER REQUEST: Level 1 means focused implementation and validation;
