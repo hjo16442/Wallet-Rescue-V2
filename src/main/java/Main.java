@@ -142,6 +142,9 @@ public class Main {
         }
         List<String> changed = new ArrayList<>();
         int repairAttempt = 0;
+        // Bound repair cycles so a permanently broken build cannot loop forever,
+        // exhaust provider quota, or leave the workflow running until timeout.
+        final int maxRepairAttempts = 3;
         while (true) {
             for (JsonElement element : edits) {
                 JsonObject edit = element.getAsJsonObject();
@@ -168,7 +171,12 @@ public class Main {
                 validateProject(targetDir);
             } catch (Exception validationError) {
                 repairAttempt++;
-                pull.comment("🛠️ مرحله " + (repairAttempt + 1)
+                if (repairAttempt > maxRepairAttempts) {
+                    throw new IllegalStateException("پس از " + maxRepairAttempts
+                            + " تلاش اصلاح خودکار، تست/ساخت هنوز ناموفق است؛ برای جلوگیری از حلقه بی‌پایان و مصرف سهمیه، کار متوقف شد. آخرین خطا:\n"
+                            + validationError.getMessage());
+                }
+                pull.comment("🛠️ تلاش اصلاح " + repairAttempt + " از " + maxRepairAttempts
                         + ": تست یا ساخت ناموفق شد؛ Robat2 خطا را تحلیل می‌کند و اصلاح مجدد انجام می‌دهد...");
                 String repairPrompt = "درخواست اصلی کاربر و زمینه مکالمه: " + modelRequest
                         + "\\n\\nتلاش قبلی کد را تغییر داد اما تست/ساخت شکست خورد. "
@@ -480,6 +488,9 @@ public class Main {
         Exception networkFailure = null;
         int lastStatus = -1;
         long attempt = 0;
+        // Retry transient provider/network errors, but stop predictably instead of
+        // hanging forever on persistent 503/429 responses.
+        final long maxProviderAttempts = 8;
         while (true) {
             attempt++;
             try {
@@ -497,11 +508,20 @@ public class Main {
                     throw new IllegalStateException("سهمیه روزانه Gemini یا محدودیت پرداخت/حساب تمام شده است؛ برای جلوگیری از مصرف بیهوده، درخواست تکرار نشد. جزئیات: "
                             + errorBody.substring(0, Math.min(700, errorBody.length())));
                 }
+                if (attempt >= maxProviderAttempts) {
+                    throw new IllegalStateException("پس از " + maxProviderAttempts
+                            + " تلاش، Gemini همچنان خطای موقت HTTP " + status
+                            + " می‌دهد؛ اجرای خودکار متوقف شد. پاسخ: "
+                            + errorBody.substring(0, Math.min(700, errorBody.length())));
+                }
                 long backoffSeconds = Math.min(60L, 3L * (1L << (int) Math.min(attempt - 1, 4L)));
                 long waitSeconds = retryAfterSeconds >= 0 ? retryAfterSeconds : backoffSeconds;
                 Thread.sleep(waitSeconds * 1000L);
             } catch (java.io.IOException ex) {
                 networkFailure = ex;
+                if (attempt >= maxProviderAttempts)
+                    throw new IllegalStateException("پس از " + maxProviderAttempts
+                            + " تلاش، اتصال به Gemini برقرار نشد: " + ex.getMessage(), ex);
                 Thread.sleep(Math.min(60000L, 3000L * (1L << (int) Math.min(attempt - 1, 4L))));
             }
         }
