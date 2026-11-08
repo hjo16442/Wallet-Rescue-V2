@@ -194,6 +194,28 @@ public class Main {
 
             try {
                 run(targetDir, "git", "diff", "--check");
+
+                // Independent second-pass review of the actual patch before tests/commit.
+                String patch = runCapture(targetDir, "git", "diff", "--no-ext-diff", "--");
+                if (patch.isBlank())
+                    throw new IllegalStateException("پس از اعمال تغییرات، diff خالی است؛ بررسی مستقل متوقف شد.");
+                String reviewRequest = "بازبینی مستقل و سخت‌گیرانه تغییرات انجام بده. درخواست اصلی کاربر: "
+                        + modelRequest
+                        + "\\n\\nDIFF واقعی تغییرات اعمال‌شده:\\n" + patch
+                        + "\\n\\nفایل‌های فعلی پروژه نیز در زمینه تو هستند. فقط خطاهای واقعی و قابل اثبات را بررسی کن: "
+                        + "اشکال منطقی، رگرسیون نسبت به رفتار قبلی، نقص امنیتی، ورودی کنترل‌نشده، مدیریت خطا، "
+                        + "ناسازگاری API/نسخه، و تست ناکافی. موارد سلیقه‌ای یا حدس را ایراد اعلام نکن. "
+                        + "اگر هیچ مانع مهمی وجود ندارد summary را دقیقاً با PASS: شروع کن. "
+                        + "اگر ایراد مهمی وجود دارد summary را با BLOCK: شروع کن و ایرادها را با مسیر و دلیل روشن بنویس. "
+                        + "این بازبینی فقط READ-ONLY است و edits باید آرایه خالی باشد.";
+                JsonObject review = askForProjectEdits(project, reviewRequest, geminiKey, model);
+                JsonArray reviewEdits = review.getAsJsonArray("edits");
+                if (reviewEdits == null || !reviewEdits.isEmpty())
+                    throw new IllegalStateException("بازبین مستقل خروجی نامعتبر یا تغییر کد پیشنهاد کرد؛ هیچ تغییری از بازبینی پذیرفته نشد.");
+                String reviewSummary = review.get("summary").getAsString().trim();
+                if (!reviewSummary.startsWith("PASS:"))
+                    throw new IllegalStateException("بازبینی مستقل تغییرات را تأیید نکرد: " + reviewSummary);
+
                 validateProject(targetDir);
             } catch (Exception validationError) {
                 repairAttempt++;
@@ -648,6 +670,20 @@ public class Main {
         String value = System.getenv(name);
         if (value == null || value.isBlank()) throw new IllegalStateException("متغیر محیطی تنظیم نشده: " + name);
         return value;
+    }
+
+    private static String runCapture(Path dir, String... command) throws Exception {
+        Process process = new ProcessBuilder(command).directory(dir.toFile())
+                .redirectErrorStream(true).start();
+        byte[] outputBytes = process.getInputStream().readAllBytes();
+        int exitCode = process.waitFor();
+        String output = new String(outputBytes, StandardCharsets.UTF_8);
+        if (exitCode != 0) {
+            String tail = output.length() > 9000 ? output.substring(output.length() - 9000) : output;
+            throw new IllegalStateException("دستور دریافت diff ناموفق بود (کد " + exitCode + "): "
+                    + String.join(" ", command) + "\\n" + tail);
+        }
+        return output;
     }
 
     private static void run(Path dir, String... command) throws Exception {
