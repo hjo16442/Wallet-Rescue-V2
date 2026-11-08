@@ -100,13 +100,17 @@ public class Main {
 
         Map<String, String> project = new LinkedHashMap<>();
         for (String relative : paths) {
-            Path file = safeResolve(targetDir, relative);
-            if (!Files.isRegularFile(file)) continue;
             try {
+                Path file = safeResolve(targetDir, relative);
+                // Never follow repository-controlled symlinks while collecting AI context.
+                if (Files.isSymbolicLink(file)
+                        || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) continue;
                 String content = Files.readString(file, StandardCharsets.UTF_8);
                 if (content.indexOf('\u0000') >= 0) continue;
                 project.put(relative, content);
-            } catch (Exception ignored) { }
+            } catch (Exception ignored) {
+                // Unsafe paths and unreadable files are excluded from model context.
+            }
         }
         if (project.isEmpty()) {
             pull.comment("⛔ فایل متنی مناسب برای ارسال به هوش مصنوعی پیدا نشد.");
@@ -381,8 +385,22 @@ public class Main {
     }
 
     private static Path safeResolve(Path root, String relative) {
-        Path resolved = root.resolve(relative).normalize();
-        if (!resolved.startsWith(root)) throw new IllegalArgumentException("مسیر خارج از پروژه رد شد.");
+        if (relative == null || relative.isBlank())
+            throw new IllegalArgumentException("مسیر خالی فایل رد شد.");
+        Path normalizedRoot = root.toAbsolutePath().normalize();
+        Path resolved = normalizedRoot.resolve(relative).normalize();
+        if (!resolved.startsWith(normalizedRoot))
+            throw new IllegalArgumentException("مسیر خارج از پروژه رد شد.");
+
+        // Reject symlinks in every existing path component, including parent folders.
+        // This prevents a tracked link from redirecting reads or writes outside checkout.
+        Path cursor = normalizedRoot;
+        Path relativePath = normalizedRoot.relativize(resolved);
+        for (Path part : relativePath) {
+            cursor = cursor.resolve(part);
+            if (Files.isSymbolicLink(cursor))
+                throw new IllegalArgumentException("مسیر دارای پیوند نمادین است و برای امنیت رد شد: " + relative);
+        }
         return resolved;
     }
 
