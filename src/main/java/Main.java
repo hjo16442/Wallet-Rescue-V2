@@ -725,7 +725,7 @@ public class Main {
             actual.addAll(readGitPaths(dir, "git", "diff", "--cached", "--name-only", "--"));
         } else {
             actual.addAll(readGitPaths(dir, "git", "diff", "--name-only", "--"));
-            actual.addAll(readGitPaths(dir, "ls-files", "--others", "--exclude-standard"));
+            actual.addAll(readGitPaths(dir, "git", "ls-files", "--others", "--exclude-standard"));
         }
         if (!actual.equals(expected)) {
             Set<String> unexpected = new LinkedHashSet<>(actual);
