@@ -586,15 +586,41 @@ public class Main {
                 throw new IllegalStateException("پاسخ AI به سقف خروجی رسید (MAX_TOKENS)؛ هیچ فایل ناقصی ثبت نشد. جزئیات مصرف: " + usage
                         + ". پاسخ باید به بخش‌های کوچک‌تر تقسیم شود؛ این محدودیت از سقف خروجی مدل است، نه محدودیت تنظیم‌شده در Robat2.");
             }
+            if (!candidate.has("content") || !candidate.get("content").isJsonObject()
+                    || !candidate.getAsJsonObject("content").has("parts")
+                    || !candidate.getAsJsonObject("content").get("parts").isJsonArray())
+                throw new IllegalStateException("پاسخ Gemini ناقص است؛ محتوای قابل پردازش ندارد و هیچ تغییری اعمال نشد.");
             JsonArray responseParts = candidate.getAsJsonObject("content").getAsJsonArray("parts");
             StringBuilder text = new StringBuilder();
-            for (JsonElement item : responseParts) if (item.getAsJsonObject().has("text"))
-                text.append(item.getAsJsonObject().get("text").getAsString());
-            JsonElement parsed = JsonParser.parseString(text.toString().trim());
-            if (!parsed.isJsonObject()) throw new IllegalStateException("ساختار JSON خروجی AI معتبر نیست.");
+            for (JsonElement item : responseParts) {
+                if (item != null && item.isJsonObject() && item.getAsJsonObject().has("text")
+                        && item.getAsJsonObject().get("text").isJsonPrimitive()
+                        && item.getAsJsonObject().get("text").getAsJsonPrimitive().isString())
+                    text.append(item.getAsJsonObject().get("text").getAsString());
+            }
+            if (text.toString().trim().isEmpty())
+                throw new IllegalStateException("Gemini متن خروجی معتبری برنگرداند؛ هیچ تغییری اعمال نشد.");
+            JsonElement parsed;
+            try {
+                parsed = JsonParser.parseString(text.toString().trim());
+            } catch (RuntimeException malformedJson) {
+                throw new IllegalStateException("JSON خروجی Gemini ناقص یا نامعتبر است؛ هیچ فایلی تغییر نکرد: "
+                        + malformedJson.getMessage(), malformedJson);
+            }
+            if (!parsed.isJsonObject())
+                throw new IllegalStateException("ساختار JSON خروجی AI معتبر نیست؛ هیچ فایلی تغییر نکرد.");
             JsonObject result = parsed.getAsJsonObject();
-            if (!result.has("summary") || !result.has("edits"))
-                throw new IllegalStateException("پاسخ AI فیلدهای لازم را ندارد.");
+            if (!result.has("summary") || !result.get("summary").isJsonPrimitive()
+                    || !result.get("summary").getAsJsonPrimitive().isString()
+                    || result.get("summary").getAsString().trim().isEmpty()
+                    || !result.has("plan") || !result.get("plan").isJsonArray()
+                    || !result.has("edits") || !result.get("edits").isJsonArray())
+                throw new IllegalStateException("پاسخ AI باید شامل summary متنی، plan آرایه‌ای و edits آرایه‌ای باشد؛ هیچ فایلی تغییر نکرد.");
+            for (JsonElement step : result.getAsJsonArray("plan")) {
+                if (step == null || !step.isJsonPrimitive() || !step.getAsJsonPrimitive().isString()
+                        || step.getAsString().trim().isEmpty())
+                    throw new IllegalStateException("یکی از مراحل برنامه AI معتبر نیست؛ پاسخ رد شد و هیچ فایلی تغییر نکرد.");
+            }
             return result;
         }
     }
