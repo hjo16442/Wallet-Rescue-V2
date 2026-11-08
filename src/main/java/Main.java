@@ -386,7 +386,8 @@ public class Main {
         int score = 0;
         for (String token : normalizedRequest.split("\\s+")) {
             if (token.length() < 3 || stop.contains(token)) continue;
-            if (normalizedPath.matches(".*\\b" + java.util.regex.Pattern.quote(token) + "\\b.*"))
+            if (normalizedPath.matches(".*\\b" + java.util.regex.Pattern.quote(token) + "\\b.*"
+            ))
                 score += 5;
             else if (normalizedPath.contains(token)) score += 2;
         }
@@ -743,10 +744,15 @@ public class Main {
 
     private static boolean isGeneratedBuildPath(String path) {
         if (path == null || path.isBlank()) return false;
-        String normalized = path;
+        String normalized = path.replace('\\', '/').trim();
+        while (normalized.startsWith("./")) {
+            normalized = normalized.substring(2);
+        }
         if (normalized.equals("target") || normalized.startsWith("target/")) return true;
+        if (normalized.equals(".gradle") || normalized.startsWith(".gradle/")) return true;
         for (String segment : normalized.split("/")) {
-            if (segment.equals(".gradle") || segment.equals("build")) return true;
+            if (segment.equals(".gradle") || segment.equals("build") || segment.equals("target")
+                    || segment.equals(".idea") || segment.equals(".cxx")) return true;
         }
         return false;
     }
