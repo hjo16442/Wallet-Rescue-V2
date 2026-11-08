@@ -117,15 +117,22 @@ jobs:
             ].join('\n');
             await github.rest.issues.createComment({ ...context.repo, issue_number, body });
 
-      - name: Summarize AI result without failing APK build
+      - name: Summarize AI result
         if: always()
         shell: bash
         run: |
           if [ "${{ steps.ai.outcome }}" = "failure" ]; then
-            echo "⚠️ **Robat2 AI execution failed. APK packaging was attempted independently.**" >> "$GITHUB_STEP_SUMMARY"
+            echo "❌ **Robat2 AI execution failed. APK packaging was attempted independently.**" >> "$GITHUB_STEP_SUMMARY"
             echo "AI failed; APK packaging result is reported by the build and verification steps."
           elif [ "${{ steps.ai.outcome }}" = "skipped" ]; then
             echo "ℹ️ **Robat2 AI step was skipped (build-only mode).**" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "✅ **Robat2 AI execution completed successfully.**" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Fail workflow if AI request failed
+        if: steps.ai.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "Robat2 AI failed. APKs may have been built, but the requested AI task was not completed."
+          exit 1
