@@ -724,7 +724,7 @@ public class Main {
                 inString = false;
                 continue;
             }
-            if (ch != '\\\\') {
+            if (ch != '\\') {
                 out.append(ch);
                 continue;
             }
@@ -733,7 +733,7 @@ public class Main {
                 continue;
             }
             char next = json.charAt(i + 1);
-            boolean valid = next == '"' || next == '\\\\' || next == '/'
+            boolean valid = next == '"' || next == '\\' || next == '/'
                     || next == 'b' || next == 'f' || next == 'n'
                     || next == 'r' || next == 't';
             if (next == 'u' && i + 5 < json.length()) {
