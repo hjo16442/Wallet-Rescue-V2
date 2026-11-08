@@ -164,8 +164,9 @@ public class Main {
                     throw new IllegalStateException("هر تغییر AI باید مسیر و محتوای متنی کامل داشته باشد؛ هیچ فایلی تغییر نکرد.");
                 String path = edit.get("path").getAsString();
                 String content = edit.get("content").getAsString();
-                if (!isAllowedPath(path))
-                    throw new IllegalStateException("مسیر فایل غیرمجاز در خروجی AI؛ هیچ فایلی تغییر نکرد: " + path);
+                if (!isAllowedPath(path) || path.indexOf('\\n') >= 0
+                        || path.indexOf('\\r') >= 0 || path.indexOf('\\t') >= 0)
+                    throw new IllegalStateException("مسیر فایل غیرمجاز یا دارای نویسه کنترلی در خروجی AI؛ هیچ فایلی تغییر نکرد: " + path);
                 if (validatedEdits.containsKey(path))
                     throw new IllegalStateException("مسیر تکراری در خروجی AI؛ هیچ فایلی تغییر نکرد: " + path);
                 Path destination = safeResolve(targetDir, path);
