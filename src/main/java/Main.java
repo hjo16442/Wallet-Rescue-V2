@@ -500,8 +500,47 @@ public class Main {
         return -1L;
     }
 
+    // Try the configured primary Gemini model first, then stable fallback models.
+    // This helps with transient 503 overload and model-specific 429 quotas.
     private static JsonObject askForProjectEdits(Map<String, String> project, String userRequest,
                                                   String key, String model) throws Exception {
+        LinkedHashSet<String> models = new LinkedHashSet<>();
+        models.add(model);
+        String configuredFallbacks = System.getenv("GEMINI_FALLBACK_MODELS");
+        if (configuredFallbacks == null || configuredFallbacks.isBlank()) {
+            configuredFallbacks = "gemini-3.7-flash,gemini-3.5-flash,gemini-3.5-flash-lite";
+        }
+        for (String candidate : configuredFallbacks.split(",")) {
+            String clean = candidate.trim();
+            if (!clean.isEmpty()) models.add(clean);
+        }
+
+        List<String> failures = new ArrayList<>();
+        for (String candidate : models) {
+            try {
+                System.out.println("Robat2 AI: trying Gemini model " + candidate);
+                JsonObject answer = askForProjectEditsWithModel(project, userRequest, key, candidate);
+                System.out.println("Robat2 AI: succeeded with model " + candidate);
+                return answer;
+            } catch (Exception ex) {
+                String message = ex.getMessage() == null ? ex.toString() : ex.getMessage();
+                failures.add(candidate + ": " + message);
+                System.err.println("Robat2 AI: model " + candidate + " failed: " + message);
+                // Do not try other models for invalid key/permission errors.
+                if (message.contains("HTTP 400") || message.contains("HTTP 401")
+                        || message.contains("HTTP 403") || message.contains("API key")
+                        || message.contains("کلید API")) {
+                    throw ex;
+                }
+            }
+        }
+        throw new IllegalStateException("تمام مدل‌های Gemini امتحان‌شده ناموفق بودند؛ "
+                + "مدل/سهمیه/دسترسی API را بررسی کنید. جزئیات: "
+                + String.join(" | ", failures));
+    }
+
+    private static JsonObject askForProjectEditsWithModel(Map<String, String> project, String userRequest,
+                                                           String key, String model) throws Exception {
         StringBuilder context = new StringBuilder();
         for (Map.Entry<String, String> entry : project.entrySet()) {
             context.append("\n--- FILE: ").append(entry.getKey()).append(" ---\n")
@@ -559,7 +598,7 @@ public class Main {
         long attempt = 0;
         // Retry transient provider/network errors, but stop predictably instead of
         // hanging forever on persistent 503/429 responses.
-        final long maxProviderAttempts = 8;
+        final long maxProviderAttempts = 2;
         while (true) {
             attempt++;
             try {
