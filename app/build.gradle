@@ -19,4 +19,5 @@ dependencies {
  coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
  implementation 'org.bitcoinj:bitcoinj-core:0.16.3'
  implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
+ testImplementation 'junit:junit:4.13.2'
 }
