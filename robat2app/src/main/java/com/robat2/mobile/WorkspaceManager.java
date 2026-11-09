@@ -129,6 +129,30 @@ public final class WorkspaceManager {
         }
     }
 
+    /** Restore the most recent saved backup for each file, keeping backups intact. */
+    public static String restoreBackups(File filesDir) {
+        File root=new File(filesDir,"robat2-workspace");
+        if(!root.isDirectory()) return "فضای پروژه خالی است.";
+        List<File> all=new ArrayList<>();
+        collect(root,all);
+        int restored=0, failed=0;
+        for(File backup:all) {
+            if(!backup.isFile() || !backup.getName().endsWith(".robat2-backup")) continue;
+            String path=backup.getPath().substring(0,backup.getPath().length()-".robat2-backup".length());
+            File target=new File(path);
+            try {
+                if(!target.getCanonicalPath().startsWith(root.getCanonicalPath()+File.separator)) { failed++; continue; }
+                File temp=new File(target.getPath()+".restore-part");
+                copy(backup,temp);
+                if(target.exists() && !target.delete()) { temp.delete(); failed++; continue; }
+                if(!temp.renameTo(target)) { temp.delete(); failed++; continue; }
+                restored++;
+            } catch(Exception e) { failed++; }
+        }
+        return "بازگردانی انجام شد: "+restored+" فایل؛ ناموفق: "+failed+
+                ". نسخه‌های پشتیبان حفظ شدند.";
+    }
+
     public static String exportZip(File filesDir, OutputStream destination) throws IOException {
         File root=new File(filesDir,"robat2-workspace");
         if(!root.isDirectory()) return "فضای پروژه هنوز فایلی ندارد.";
