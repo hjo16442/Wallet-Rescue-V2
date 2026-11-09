@@ -230,10 +230,16 @@ public class MainActivity extends Activity {
     private boolean appendZip(Uri uri,String zipName,StringBuilder out) {
         try(InputStream in=getContentResolver().openInputStream(uri)) {
             if(in==null) return false;
-            String report=ProjectLibrary.importZip(in,getFilesDir());
+            String libraryReport=ProjectLibrary.importZip(in,getFilesDir());
+            String workspaceReport;
+            try(InputStream projectIn=getContentResolver().openInputStream(uri)) {
+                if(projectIn==null) throw new IOException("خواندن دوباره ZIP پروژه ناموفق بود.");
+                workspaceReport=WorkspaceManager.importZip(projectIn,getFilesDir());
+            }
+            final String wr=workspaceReport;
             runOnUiThread(() -> {
-                filesLabel.setText(ProjectLibrary.stats(getFilesDir()));
-                status.setText(report+" فایل‌ها فقط ذخیره شدند؛ هیچ کدی اجرا نشد.");
+                filesLabel.setText(ProjectLibrary.stats(getFilesDir())+" | "+WorkspaceManager.stats(getFilesDir()));
+                status.setText(libraryReport+" | "+wr+" | کدها اجرا نشده‌اند.");
             });
             String relevant=ProjectLibrary.findRelevant(getFilesDir(),zipName,MAX_PROJECT_CHARS-out.length());
             if(!relevant.isEmpty()) out.append(relevant);
