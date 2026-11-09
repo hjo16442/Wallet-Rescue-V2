@@ -43,14 +43,14 @@ Java_com_robat2_mobile_LocalModelEngine_generate(JNIEnv *env, jclass, jstring pr
     const llama_vocab * vocab = llama_model_get_vocab(g_model);
     const int token_count = -llama_tokenize(vocab, prompt.c_str(), (int)prompt.size(), nullptr, 0, true, true);
     if (token_count <= 0) return env->NewStringUTF("خطا در تبدیل متن به توکن.");
-    if (token_count > 3800) return env->NewStringUTF("درخواست و سابقه گفتگو بیش از ظرفیت نسخه فعلی است؛ لطفاً متن کوتاه‌تری بفرست.");
+    if (token_count > (int)g_context_size - 128) return env->NewStringUTF("درخواست و سابقه گفتگو از ظرفیت مدل فعال بیشتر است؛ متن را کوتاه‌تر یا در چند بخش ارسال کن.");
     std::vector<llama_token> tokens((size_t)token_count);
     if (llama_tokenize(vocab, prompt.c_str(), (int)prompt.size(), tokens.data(), (int)tokens.size(), true, true) < 0)
         return env->NewStringUTF("خطا در پردازش درخواست.");
 
     llama_context_params cp = llama_context_default_params();
     cp.n_ctx = g_context_size;
-    cp.n_batch = std::min(g_context_size == 2048 ? 256 : 512, std::max(32, token_count));
+    cp.n_batch = std::min((int)g_context_size, std::max(32, token_count));
     cp.n_threads = 4;
     cp.n_threads_batch = 4;
     llama_context * ctx = llama_init_from_model(g_model, cp);
@@ -66,7 +66,8 @@ Java_com_robat2_mobile_LocalModelEngine_generate(JNIEnv *env, jclass, jstring pr
     llama_sampler_chain_add(sampler, llama_sampler_init_greedy());
     std::string output;
     std::vector<char> piece(8192);
-    const int limit = std::min(2048, std::max(1, (int)max_tokens));
+    const int remaining = (int)g_context_size - token_count - 8;
+    const int limit = std::min(2048, std::min(std::max(1, (int)max_tokens), std::max(1, remaining)));
     for (int i = 0; i < limit; ++i) {
         if (g_stop_requested.load()) break;
         llama_token token = llama_sampler_sample(sampler, ctx, -1);
