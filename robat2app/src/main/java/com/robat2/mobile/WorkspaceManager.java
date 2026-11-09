@@ -135,6 +135,20 @@ public final class WorkspaceManager {
         return false;
     }
     private static final class FileScore { final File file; final int score; FileScore(File f,int s){file=f;score=s;} }
+    private static String readText(File file,int maxChars) {
+        if(file==null || !file.isFile() || maxChars<=0) return "";
+        int limit=Math.min(28000,Math.max(4,maxChars*4));
+        try(InputStream in=new FileInputStream(file); ByteArrayOutputStream out=new ByteArrayOutputStream()) {
+            byte[] buffer=new byte[4096]; int total=0,n;
+            while(total<limit && (n=in.read(buffer,0,Math.min(buffer.length,limit-total)))!=-1) {
+                out.write(buffer,0,n); total+=n;
+            }
+            byte[] bytes=out.toByteArray();
+            for(byte b:bytes) if(b==0) return "";
+            String value=new String(bytes,StandardCharsets.UTF_8);
+            return value.length()>maxChars?value.substring(0,maxChars):value;
+        } catch(IOException e) { return ""; }
+    }
     private static void collect(File dir,List<File> out) {
         File[] children=dir.listFiles(); if(children==null) return;
         for(File f:children) { if(f.isDirectory()) collect(f,out); else if(f.isFile()) out.add(f); }
