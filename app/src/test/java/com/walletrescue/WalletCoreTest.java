@@ -1,6 +1,7 @@
 package com.walletrescue;
 
 import org.junit.Test;
+import org.bitcoinj.crypto.MnemonicCode;
 import static org.junit.Assert.*;
 
 public class WalletCoreTest {
@@ -8,6 +9,7 @@ public class WalletCoreTest {
     public void createsValidTwelveWordWallet() throws Exception {
         WalletCore.WalletResult wallet = WalletCore.create(12);
         assertEquals(12, wallet.words.size());
+        MnemonicCode.INSTANCE.check(wallet.words);
         assertNotNull(wallet.mnemonic());
         assertTrue(wallet.mnemonic().trim().split("\\s+").length == 12);
         assertTrue(wallet.btc.matches("^1[1-9A-HJ-NP-Za-km-z]{25,34}$"));
@@ -19,6 +21,7 @@ public class WalletCoreTest {
     public void createsValidTwentyFourWordWallet() throws Exception {
         WalletCore.WalletResult wallet = WalletCore.create(24);
         assertEquals(24, wallet.words.size());
+        MnemonicCode.INSTANCE.check(wallet.words);
         assertEquals(24, wallet.mnemonic().trim().split("\\s+").length);
         assertTrue(wallet.btc.matches("^1[1-9A-HJ-NP-Za-km-z]{25,34}$"));
         assertTrue(wallet.eth.matches("^0x[0-9a-fA-F]{40}$"));
