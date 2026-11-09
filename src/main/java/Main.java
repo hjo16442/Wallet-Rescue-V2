@@ -85,6 +85,7 @@ public class Main {
             modelRequest = "پروفایل اجرای انتخاب‌شده:\n" + profile
                     + "\n\nدستور کاربر:\n" + modelRequest;
         }
+        modelRequest += "\n\nالزام مهم برای راهنمای تحویل به کاربر: در plan مراحل را فارسی، شماره‌گذاری‌شده و فایل‌به‌فایل بنویس. برای هر فایل دقیقاً نام فایل، مسیر کامل داخل پروژه، نوع عملیات (ساخت فایل جدید یا جایگزینی فایل موجود)، محل دقیق قرارگیری کد و وابستگی‌های لازم را مشخص کن. اگر چند فایل لازم است هر فایل را در یک مرحله جدا بیاور. هیچ‌گاه نگو کد را در فایل نامشخص یا جای نامشخص قرار دهد. تغییرات واقعی را در edits اعمال کن؛ plan فقط راهنمای قابل فهم برای کاربر است.";
         // Build-only mode lets a maintainer rerun Android packaging after a code fix
         // without asking Gemini to generate another full-project patch.
         if (!auditMode && requestText.equalsIgnoreCase("build-only")) {
@@ -144,6 +145,7 @@ public class Main {
                     + answer.get("summary").getAsString() + "\n\n" + formatPlan(answer.getAsJsonArray("plan")));
             return;
         }
+        Map<String, String> originalProject = new LinkedHashMap<>(project);
         List<String> changed = new ArrayList<>();
         int repairAttempt = 0;
         // Bound repair cycles so a permanently broken build cannot loop forever,
@@ -265,14 +267,17 @@ public class Main {
         run(targetDir, "git", "push", "origin", "HEAD:refs/heads/" + pull.getHead().getRef());
 
         StringBuilder fileList = new StringBuilder();
-        changed.forEach(p -> fileList.append("- `").append(p).append("`\n"));
-        pull.comment("## ✅ تغییرات درخواستی پیاده‌سازی شد\n\n"
-                + "**درخواست:** " + requestText + "\n\n"
-                + "**خلاصه:** " + answer.get("summary").getAsString() + "\n\n"
+        changed.forEach(p -> fileList.append("- `").append(p).append("`\\n"));
+        pull.comment("## ✅ تغییرات درخواستی پیاده‌سازی شد\\n\\n"
+                + "**درخواست:** " + requestText + "\\n\\n"
+                + "**خلاصه:** " + answer.get("summary").getAsString() + "\\n\\n"
                 + formatPlan(answer.getAsJsonArray("plan"))
-                + "**فایل‌های تغییرکرده:**\n" + fileList
-                + "\nتست پروژه موفق بود و تغییرات روی شاخه همین PR ثبت شد. "
+                + "**فایل‌های تغییرکرده:**\\n" + fileList
+                + "\\nبرای هر فایل، راهنمای جداگانه شامل مسیر دقیق، محل جایگذاری و کد آماده در پیام بعدی ارسال می‌شود."
+                + "\\nتست پروژه موفق بود و تغییرات روی شاخه همین PR ثبت شد. "
                 + "قبل از ادغام، تغییرات را بازبینی کنید؛ ربات PR را خودکار ادغام نمی‌کند.");
+        postFilePlacementGuides(pull, repoFull, pull.getHead().getRef(),
+                changed, originalProject, project);
     }
 
     private static String loadRecentConversation(String repository, int prNumber,
@@ -319,6 +324,44 @@ public class Main {
         } catch (Exception ex) {
             System.err.println("خواندن سابقه گفت‌وگوی PR ناموفق بود: " + ex.getMessage());
             return "";
+        }
+    }
+
+    /**
+     * Sends one separate, copy-ready placement guide for every changed source file.
+     * Large files are linked directly instead of overflowing GitHub's comment limit.
+     */
+    private static void postFilePlacementGuides(GHPullRequest pull, String repository,
+                                                String branch, List<String> changed,
+                                                Map<String, String> originalProject,
+                                                Map<String, String> currentProject) throws Exception {
+        int index = 0;
+        for (String path : changed) {
+            String content = currentProject.get(path);
+            if (content == null) continue;
+            boolean existed = originalProject.containsKey(path);
+            String kind = existed ? "جایگزینی محتوای فایل موجود" : "ساخت فایل جدید";
+            StringBuilder guide = new StringBuilder();
+            guide.append("## 🧩 راهنمای فایل ").append(++index).append(" از ").append(changed.size()).append("\\n\\n")
+                    .append("**نام فایل:** `").append(path.substring(path.lastIndexOf('/') + 1)).append("`\\n\\n")
+                    .append("**مسیر دقیق در پروژه:** `").append(path).append("`\\n\\n")
+                    .append("**نوع عملیات:** ").append(kind).append("\\n\\n")
+                    .append("**محل جایگذاری:** در ساختار پروژه، دقیقاً به همین مسیر برو. ");
+            if (existed) guide.append("محتوای فعلی همین فایل را با نسخه جدید جایگزین کن.");
+            else guide.append("در این مسیر فایل جدیدی با همین نام بساز و کد را داخل آن قرار بده.");
+            guide.append("\\n\\n**کد آماده:**\\n");
+            if (content.length() <= 12000) {
+                guide.append("```java\\n").append(content);
+                if (!content.endsWith("\\n")) guide.append("\\n");
+                guide.append("```");
+            } else {
+                String fileUrl = "https://github.com/" + repository + "/blob/" + branch + "/" + path;
+                guide.append("این فایل طولانی است و برای جلوگیری از ناقص شدن پیام، کد کامل در لینک مستقیم فایل قرار دارد: ")
+                        .append(fileUrl).append("\\n\\n")
+                        .append("فایل را باز کن، کد کامل را کپی کن و در مسیر بالا قرار بده.");
+            }
+            guide.append("\\n\\n**نکته:** فقط همین فایل را در این مرحله بررسی/جایگذاری کن؛ فایل بعدی در پیام جداگانه آمده است.");
+            pull.comment(guide.toString());
         }
     }
 
