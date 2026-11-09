@@ -93,6 +93,34 @@ public final class WorkspaceManager {
         return files.size()+" فایل برای خروجی پروژه بسته‌بندی شد.";
     }
 
+    public static String findRelevant(File filesDir, String query, int maxChars) {
+        File root=new File(filesDir,"robat2-workspace");
+        if(!root.isDirectory() || maxChars<=0) return "";
+        List<File> files=new ArrayList<>(); collect(root,files);
+        String[] terms=query.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}_]+");
+        List<FileScore> ranked=new ArrayList<>();
+        for(File file:files) {
+            String name=root.toURI().relativize(file.toURI()).getPath().toLowerCase(Locale.ROOT);
+            if(name.endsWith(".part") || name.endsWith(".robat2-backup")) continue;
+            int score=0;
+            for(String term:terms) if(term.length()>1 && name.contains(term)) score+=10;
+            if(name.endsWith("mainactivity.java") || name.endsWith("build.gradle") || name.endsWith("androidmanifest.xml")) score+=2;
+            ranked.add(new FileScore(file,score));
+        }
+        ranked.sort((a,b)->Integer.compare(b.score,a.score));
+        StringBuilder out=new StringBuilder(); int selected=0;
+        for(FileScore item:ranked) {
+            if(selected>=10 || out.length()>=maxChars) break;
+            int remaining=maxChars-out.length();
+            String content=readText(item.file,Math.min(7000,remaining));
+            if(content.isEmpty()) continue;
+            String path=root.toURI().relativize(item.file.toURI()).getPath();
+            out.append("\\n\\n===== EXISTING WORKSPACE FILE: ").append(path).append(" =====\\n").append(content);
+            selected++;
+        }
+        return out.toString();
+    }
+
     public static String stats(File filesDir) {
         File root=new File(filesDir,"robat2-workspace");
         return count(root)+" فایل ساخته‌شده | "+(directoryBytes(root)/1024)+" KB";
@@ -106,7 +134,7 @@ public final class WorkspaceManager {
         for(String ext:EXT) if(lower.endsWith(ext)) return true;
         return false;
     }
-    private static void collect(File dir,List<File> out) {
+    private static final class FileScore { final File file; final int score; FileScore(File f,int s){file=f;score=s;} }\n    private static void collect(File dir,List<File> out) {
         File[] children=dir.listFiles(); if(children==null) return;
         for(File f:children) { if(f.isDirectory()) collect(f,out); else if(f.isFile()) out.add(f); }
     }
