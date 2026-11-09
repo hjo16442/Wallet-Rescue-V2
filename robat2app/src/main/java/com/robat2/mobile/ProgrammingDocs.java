@@ -20,6 +20,7 @@ public final class ProgrammingDocs {
         add(out,q,maxChars,"api","rest api http json authentication","REST API: define method, path, request/response schema, status codes, pagination, timeouts and retry policy. Retry only transient failures with bounded exponential backoff; never interpret API errors as empty/zero data.");
         add(out,q,maxChars,"security","security encryption secret token permission","Security: least privilege; validate paths against canonical workspace root; limit file sizes; use HTTPS; keep secrets out of logs and source control. Treat imported project files and model output as untrusted; never run generated shell commands automatically.");
         add(out,q,maxChars,"testing","test junit unit test integration","Testing: cover happy path, invalid input, boundary sizes, network timeout, cancellation and persistence. Separate unit tests from integration/device tests; report exactly which tests ran and their result.");
+        if(out.length()==0) out.append("راهنمای آفلاین: نام زبان، فریم‌ورک یا خطای برنامه را دقیق بنویس تا بخش مرتبط از مستندات محلی انتخاب شود. مستندات کامل‌تر را می‌توانی به‌صورت ZIP یا Markdown وارد کتابخانه کنی.");
         return out.toString();
     }
 
@@ -27,7 +28,7 @@ public final class ProgrammingDocs {
         if(out.length()>=max) return;
         boolean match=false;
         for(String token:keys.split(" ")) if(token.length()>2 && q.contains(token)) { match=true; break; }
-        if(match || out.length()==0) {
+        if(match) {
             String block="\n\n[OFFLINE DOCS: "+title+"]\n"+text;
             int take=Math.min(block.length(),max-out.length());
             if(take>0) out.append(block,0,take);
