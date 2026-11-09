@@ -63,7 +63,7 @@ Java_com_robat2_mobile_LocalModelEngine_generate(JNIEnv *env, jclass, jstring pr
     std::vector<char> piece(8192);
     const int limit = std::min(2048, std::max(1, (int)max_tokens));
     for (int i = 0; i < limit; ++i) {
-        const llama_token token = llama_sampler_sample(sampler, ctx, -1);
+        llama_token token = llama_sampler_sample(sampler, ctx, -1);
         if (llama_vocab_is_eog(vocab, token)) break;
         const int n = llama_token_to_piece(vocab, token, piece.data(), (int)piece.size(), 0, true);
         if (n > 0) output.append(piece.data(), (size_t)n);
