@@ -28,7 +28,7 @@ public final class ProgrammingDocs {
         boolean match=false;
         for(String token:keys.split(" ")) if(token.length()>2 && q.contains(token)) { match=true; break; }
         if(match || out.length()==0) {
-            String block="\\n\\n[OFFLINE DOCS: "+title+"]\\n"+text;
+            String block="\n\n[OFFLINE DOCS: "+title+"]\n"+text;
             int take=Math.min(block.length(),max-out.length());
             if(take>0) out.append(block,0,take);
         }
