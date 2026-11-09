@@ -11,6 +11,8 @@ import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
+import java.security.MessageDigest;
+import java.util.Arrays;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -88,8 +90,22 @@ public final class AddressScanner {
     static boolean validAddress(String a, int network) {
         if (network == BTC) return BTC_LEGACY.matcher(a).matches() || BTC_SEGWIT.matcher(a).matches();
         if (network == ETH) return ETH_ADDRESS.matcher(a).matches();
-        if (network == TRON) return TRON_ADDRESS.matcher(a).matches();
+        if (network == TRON) return validTronAddress(a);
         return false;
+    }
+
+    private static boolean validTronAddress(String address) {
+        if (address == null || !TRON_ADDRESS.matcher(address).matches()) return false;
+        try {
+            byte[] decoded = Base58.decode(address);
+            if (decoded.length != 25 || decoded[0] != 0x41) return false;
+            byte[] payload = Arrays.copyOfRange(decoded, 0, 21);
+            byte[] first = MessageDigest.getInstance("SHA-256").digest(payload);
+            byte[] second = MessageDigest.getInstance("SHA-256").digest(first);
+            return Arrays.equals(Arrays.copyOfRange(decoded, 21, 25), Arrays.copyOfRange(second, 0, 4));
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     private static String checkBitcoin(String address) throws Exception {
@@ -128,7 +144,7 @@ public final class AddressScanner {
         BigDecimal trx = BigDecimal.valueOf(sun).divide(new BigDecimal("1000000"), 6, RoundingMode.DOWN);
 
         byte[] decoded = Base58.decode(address);
-        if (decoded.length != 25) throw new Exception("قالب آدرس TRON قابل تبدیل نیست");
+        if (!validTronAddress(address)) throw new Exception("آدرس TRON یا checksum آن معتبر نیست");
         String ownerHex = Hex.toHexString(decoded, 1, 20);
         String parameter = "000000000000000000000000" + ownerHex;
         JSONObject tokenRequest = new JSONObject()
