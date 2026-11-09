@@ -4,6 +4,8 @@ android {
     namespace 'com.robat2.mobile'
     compileSdk 35
 
+    testOptions { unitTests.returnDefaultValues = true }
+
     defaultConfig {
         applicationId 'com.robat2.mobile'
         minSdk 24
@@ -68,3 +70,8 @@ tasks.register('downloadOfflineModel') {
     }
 }
 tasks.named('preBuild').configure { dependsOn tasks.named('downloadOfflineModel') }
+
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
