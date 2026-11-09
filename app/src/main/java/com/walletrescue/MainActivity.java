@@ -8,6 +8,8 @@ import android.content.Context;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ScrollView;
+import android.widget.Spinner;
+import android.widget.ArrayAdapter;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
@@ -17,6 +19,7 @@ import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity{
  private EditText inputText;
+ private Spinner networkSpinner;
  private TextView outputText,statusText,speedText,walletText,progressText;
  private Button startBtn,stopBtn,create12Btn,create24Btn,copyBtn,newWalletBtn;
  private ScrollView outputScroll;
@@ -28,6 +31,10 @@ public class MainActivity extends AppCompatActivity{
   super.onCreate(b);
   setContentView(R.layout.activity_main);
   inputText=findViewById(R.id.inputText);
+  networkSpinner=findViewById(R.id.networkSpinner);
+  ArrayAdapter<String> networks=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,new String[]{"Bitcoin (BTC)","Ethereum (ETH)","TRON + USDT (TRC20)"});
+  networks.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+  networkSpinner.setAdapter(networks);
   outputText=findViewById(R.id.outputText);
   statusText=findViewById(R.id.statusText);
   speedText=findViewById(R.id.speedText);
@@ -139,28 +146,30 @@ public class MainActivity extends AppCompatActivity{
   scanning=true;
   startBtn.setEnabled(false);
   stopBtn.setEnabled(true);
-  outputText.setText("بررسی آدرس‌های عمومی BTC آغاز شد…");
-  statusText.setText("در حال بررسی BTC…");
+  int selectedNetwork=networkSpinner.getSelectedItemPosition();
+  String selectedName=selectedNetwork==0?"BTC":selectedNetwork==1?"ETH":"TRON / USDT-TRC20";
+  outputText.setText("بررسی آدرس‌های عمومی "+selectedName+" آغاز شد…");
+  statusText.setText("در حال بررسی "+selectedName+"…");
   speedText.setText("۰ از "+fmt(list.size()));
   t0=SystemClock.elapsedRealtime();
   new Thread(()->{
    try{
-    String report=AddressScanner.scan(this,list,0,(done,total)->runOnUiThread(()->{
+    String report=AddressScanner.scan(this,list,selectedNetwork,(done,total)->runOnUiThread(()->{
      if(!scanCancelled){
       long ms=Math.max(1,SystemClock.elapsedRealtime()-t0);
-      statusText.setText("BTC — "+done+" از "+total);
+      statusText.setText(selectedName+" — "+done+" از "+total);
       speedText.setText(fmt(done)+" / "+fmt(total)+" آدرس | "+fmt(done*1000L/ms)+" آدرس/ثانیه");
      }
     }),()->scanCancelled);
     runOnUiThread(()->{
      outputText.setText(report);
-     statusText.setText(scanCancelled?"بررسی متوقف شد.":"بررسی BTC تمام شد.");
+     statusText.setText(scanCancelled?"بررسی متوقف شد.":"بررسی "+selectedName+" تمام شد.");
      speedText.setText(" ");
      finishScan();
     });
    }catch(Exception e){
     runOnUiThread(()->{
-     statusText.setText(scanCancelled?"بررسی متوقف شد.":"خطا در بررسی BTC");
+     statusText.setText(scanCancelled?"بررسی متوقف شد.":"خطا در بررسی "+selectedName);
      outputText.append("\n"+(e.getMessage()==null?e.toString():e.getMessage()));
      speedText.setText(" ");
      finishScan();
