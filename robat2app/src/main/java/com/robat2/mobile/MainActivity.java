@@ -16,6 +16,8 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 public class MainActivity extends Activity {
     private static final String PREFS = "robat2_settings";
@@ -197,23 +199,81 @@ public class MainActivity extends Activity {
         if(out.length()>=MAX_PROJECT_CHARS) return false;
         String name=queryName(uri);
         String lower=name.toLowerCase(java.util.Locale.ROOT);
-        String[] allowed={".java",".kt",".xml",".json",".txt",".md",".gradle",".properties",".py",
-                ".js",".ts",".cpp",".h",".c",".yml",".yaml",".html",".css",".sql",".sh",".toml"};
-        boolean valid=false;
-        for(String ext:allowed) if(lower.endsWith(ext)) { valid=true; break; }
-        if(!valid) return false;
+        if(lower.endsWith(".zip")) return appendZip(uri,name,out);
+        if(!isAllowedSource(name)) return false;
         try(InputStream in=getContentResolver().openInputStream(uri);
             ByteArrayOutputStream bytes=new ByteArrayOutputStream()) {
             if(in==null) return false;
-            byte[] buf=new byte[4096]; int n; int limit=Math.min(30000,MAX_PROJECT_CHARS-out.length());
-            while((n=in.read(buf))!=-1 && bytes.size()<limit) bytes.write(buf,0,Math.min(n,limit-bytes.size()));
+            byte[] buf=new byte[4096]; int n;
+            int limit=Math.min(30000,MAX_PROJECT_CHARS-out.length());
+            while((n=in.read(buf))!=-1 && bytes.size()<limit)
+                bytes.write(buf,0,Math.min(n,limit-bytes.size()));
             String content=new String(bytes.toByteArray(),StandardCharsets.UTF_8);
             if(content.indexOf('\u0000')>=0) return false;
-            int remaining=MAX_PROJECT_CHARS-out.length();
-            out.append("\n\n===== FILE: ").append(name).append(" =====\n");
-            if(out.length()<MAX_PROJECT_CHARS) out.append(content,0,Math.min(content.length(),MAX_PROJECT_CHARS-out.length()));
+            appendProjectText(out,name,content);
             return true;
         } catch(Exception e) { return false; }
+    }
+
+    // ZIP import is limited to source/text files; paths are sanitized and data is never executed.
+    private boolean appendZip(Uri uri,String zipName,StringBuilder out) {
+        int accepted=0, skipped=0, totalRead=0;
+        try(InputStream raw=getContentResolver().openInputStream(uri);
+            ZipInputStream zip=raw==null ? null : new ZipInputStream(new BufferedInputStream(raw))) {
+            if(zip==null) return false;
+            ZipEntry entry;
+            byte[] buffer=new byte[4096];
+            while((entry=zip.getNextEntry())!=null) {
+                if(entry.isDirectory()) { zip.closeEntry(); continue; }
+                String path=entry.getName();
+                if(!safeZipPath(path) || !isAllowedSource(path)) { skipped++; zip.closeEntry(); continue; }
+                if(accepted>=30 || out.length()>=MAX_PROJECT_CHARS) { skipped++; zip.closeEntry(); continue; }
+                int remaining=Math.min(30000,MAX_PROJECT_CHARS-out.length());
+                ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+                int n, entryRead=0;
+                while((n=zip.read(buffer))!=-1) {
+                    int take=Math.min(n,Math.min(remaining-bytes.size(),6000-totalRead-entryRead));
+                    if(take<=0) break;
+                    bytes.write(buffer,0,take); entryRead+=take;
+                }
+                totalRead+=entryRead;
+                String text=new String(bytes.toByteArray(),StandardCharsets.UTF_8);
+                if(text.indexOf('\u0000')>=0) { skipped++; zip.closeEntry(); continue; }
+                appendProjectText(out,zipName+" / "+path,text);
+                accepted++;
+                zip.closeEntry();
+                if(totalRead>=6000 || out.length()>=MAX_PROJECT_CHARS) break;
+            }
+            final int a=accepted, s=skipped;
+            runOnUiThread(() -> status.setText("ZIP بررسی شد: "+a+" فایل متنی پذیرفته، "+s+" فایل رد شد؛ هیچ فایلی اجرا نشد."));
+            return accepted>0;
+        } catch(Exception e) {
+            runOnUiThread(() -> status.setText("خواندن ZIP ناموفق: "+safeMessage(e)));
+            return false;
+        }
+    }
+
+    private boolean safeZipPath(String path) {
+        if(path==null || path.isEmpty() || path.startsWith("/") || path.startsWith("\\") ||
+                path.matches("^[A-Za-z]:.*")) return false;
+        String normalized=path.replace('\\','/');
+        for(String part:normalized.split("/")) if(part.equals("..") || part.equals(".")) return false;
+        return true;
+    }
+
+    private boolean isAllowedSource(String name) {
+        String lower=name.toLowerCase(java.util.Locale.ROOT);
+        String[] allowed={".java",".kt",".xml",".json",".txt",".md",".gradle",".properties",".py",
+                ".js",".ts",".cpp",".h",".c",".yml",".yaml",".html",".css",".sql",".sh",".toml"};
+        for(String ext:allowed) if(lower.endsWith(ext)) return true;
+        return false;
+    }
+
+    private void appendProjectText(StringBuilder out,String name,String content) {
+        if(out.length()>=MAX_PROJECT_CHARS) return;
+        out.append("\n\n===== FILE: ").append(name.replace("\n","_").replace("\r","_")).append(" =====\n");
+        int remaining=MAX_PROJECT_CHARS-out.length();
+        if(remaining>0) out.append(content,0,Math.min(content.length(),remaining));
     }
 
     private String queryName(Uri uri) {
