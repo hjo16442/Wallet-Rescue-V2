@@ -32,7 +32,8 @@ public class MainActivity extends Activity {
     private static final int EXPORT_PROJECT_FILE = 4103;
     private EditText input;
     private TextView status, conversation, filesLabel;
-    private Button send, clear, pickFiles, saveAnswer, exportProject, stop, validateProject, restoreProject, model7bButton, analyzeProject;
+    private Button send, clear, pickFiles, saveAnswer, exportProject, stop, validateProject, restoreProject, model7bButton, analyzeProject, createProjectButton;
+    private boolean projectCreationMode = false;
     private Spinner modeSelector;
     private String selectedMode = "مهندس خودکار";
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -120,6 +121,8 @@ public class MainActivity extends Activity {
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
+        createProjectButton = new Button(this); createProjectButton.setText("ساخت پروژه از توضیح");
+        LinearLayout.LayoutParams createParams=params(); createParams.topMargin=dp(3); root.addView(createProjectButton,createParams);
         send = new Button(this); send.setText("ارسال"); send.setEnabled(false);
         stop = new Button(this); stop.setText("توقف"); stop.setEnabled(false);
         clear = new Button(this); clear.setText("گفتگوی جدید");
@@ -129,6 +132,7 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams ap=params(); ap.topMargin=dp(2); root.addView(actions,ap);
         setContentView(root);
         send.setOnClickListener(v -> submit());
+        createProjectButton.setOnClickListener(v -> createProjectFromDescription());
         stop.setOnClickListener(v -> stopGeneration());
         clear.setOnClickListener(v -> clearConversation());
         pickFiles.setOnClickListener(v -> openProjectPicker());
@@ -440,8 +444,17 @@ public class MainActivity extends Activity {
         return base + " Mode: PROFESSIONAL ROBOT. Be concise, accurate, versatile, and practical. Give a direct answer first, then steps or code as needed.";
     }
 
+    private void createProjectFromDescription() {
+        if(input.getText().toString().trim().isEmpty()) { status.setText("ابتدا توضیح بده چه برنامه‌ای می‌خواهی ساخته شود."); return; }
+        projectCreationMode=true;
+        submit();
+    }
+
     private void submit() {
-        final String question=input.getText().toString().trim();
+        String typedQuestion=input.getText().toString().trim();
+        final boolean createProject=projectCreationMode;
+        projectCreationMode=false;
+        final String question=createProject ? ("درخواست ساخت یک پروژه نرم‌افزاری کامل بر اساس توضیح زیر است. نوع برنامه و ساختار مناسب را تعیین کن. فایل‌های ضروری و کامل را با مسیرهای نسبی در بلوک‌های ROB2_FILE تولید کن. README فارسی، ساختار پوشه‌ها، فایل‌های پیکربندی متناسب با فناوری انتخابی و کدهای لازم را بساز. وابستگی‌ها را فقط در فایل پیکربندی اعلام کن و ادعا نکن نصب شده‌اند. فایل‌ها باید با هم سازگار باشند و پروژه قابل خروجی ZIP باشد. هیچ build یا تستی را موفق اعلام نکن مگر واقعاً اجرا شده باشد. توضیح کاربر: "+typedQuestion) : typedQuestion;
         if(question.isEmpty() || generating) return;
         if(!modelReady) { status.setText("مدل هنوز آماده نیست."); return; }
         boolean compactModel=modelFile!=null && modelFile.getName().toLowerCase(java.util.Locale.ROOT).contains("7b");
