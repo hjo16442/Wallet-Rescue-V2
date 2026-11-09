@@ -119,10 +119,6 @@ public class MainActivity extends AppCompatActivity{
 
  private void startScan(){
   if(scanning) return;
-  if(!walletCreated){
-   statusText.setText("ابتدا کیف پول بسازید یا آدرس BTC معتبر وارد کنید.");
-   return;
-  }
   List<String> list=new ArrayList<>();
   for(String s:inputText.getText().toString().split("[\r\n,;\s]+"))
    if(!s.trim().isEmpty()) list.add(s.trim());
@@ -131,7 +127,7 @@ public class MainActivity extends AppCompatActivity{
    if(currentWallet!=null && currentWallet.btc!=null && !currentWallet.btc.isEmpty()){
     list.add(currentWallet.btc);
    } else {
-    statusText.setText("آدرس عمومی BTC را وارد کنید یا کیف پول بسازید.");
+    statusText.setText("برای بررسی، آدرس عمومی BTC را وارد کنید یا ابتدا کیف پول بسازید.");
     return;
    }
   }
