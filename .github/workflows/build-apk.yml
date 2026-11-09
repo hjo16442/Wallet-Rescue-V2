@@ -37,7 +37,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Build offline Robat2 APK with bundled model
+      - name: Build Robat2 APK without bundling the language model
         run: gradle :robat2app:assembleDebug --no-daemon
       - name: Compile Robat2 AI engine
         run: mvn -B -q package
@@ -51,6 +51,11 @@ jobs:
           test -s robat2app/build/outputs/apk/debug/robat2app-debug.apk
           file app/build/outputs/apk/debug/app-debug.apk
           file robat2app/build/outputs/apk/debug/robat2app-debug.apk
+          test "$(stat -c%s robat2app/build/outputs/apk/debug/robat2app-debug.apk)" -lt 100000000
+          if unzip -l robat2app/build/outputs/apk/debug/robat2app-debug.apk | grep -qi '\.gguf'; then
+            echo "Unexpected GGUF model found inside APK"
+            exit 1
+          fi
       - name: Upload Robat2 APK
         uses: actions/upload-artifact@v4
         with:
