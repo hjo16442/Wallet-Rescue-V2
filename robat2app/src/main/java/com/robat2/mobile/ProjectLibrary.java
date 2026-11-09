@@ -112,7 +112,7 @@ public final class ProjectLibrary {
     private static boolean unsafe(String name) {
         if (name == null || name.isEmpty() || name.startsWith("/") || name.startsWith("\\\\") ||
                 name.matches("^[A-Za-z]:.*")) return true;
-        for (String part : name.replace('\\\\','/').split("/"))
+        for (String part : name.replace('\\','/').split("/"))
             if (part.equals("..") || part.equals(".")) return true;
         return false;
     }
