@@ -134,8 +134,24 @@ public class MainActivity extends Activity {
         exportProject.setOnClickListener(v -> exportProjectZip());
         validateProject.setOnClickListener(v -> runProjectValidation());
         restoreProject.setOnClickListener(v -> restoreProjectBackup());
-        model7bButton.setOnClickListener(v -> confirm7BModel());
+        model7bButton.setOnClickListener(v -> { if(modelFile!=null && modelFile.getName().toLowerCase(java.util.Locale.ROOT).contains("7b")) switchTo3BModel(); else confirm7BModel(); });
         prepareModel();
+    }
+
+    private void switchTo3BModel() {
+        if(generating) { status.setText("ابتدا پاسخ فعلی تمام شود."); return; }
+        model7bButton.setEnabled(false);
+        send.setEnabled(false);
+        worker.execute(() -> {
+            File three=new File(getFilesDir(),"robat2-model.gguf");
+            boolean ok=three.isFile() && LocalModelEngine.loadModel(three.getAbsolutePath());
+            if(ok) { modelFile=three; modelReady=true; }
+            runOnUiThread(() -> {
+                status.setText(ok?"مدل سبک ۳B فعال شد.":"بازگشت به مدل ۳B ناموفق بود؛ فضای حافظه را بررسی کن.");
+                model7bButton.setText("دانلود / فعال‌سازی مدل برنامه‌نویسی ۷B (۴٫۷ گیگابایت)");
+                model7bButton.setEnabled(true); send.setEnabled(modelReady);
+            });
+        });
     }
 
     private void confirm7BModel() {
@@ -215,6 +231,7 @@ public class MainActivity extends Activity {
                 }
                 runOnUiThread(() -> {
                     status.setText("مدل Qwen2.5-Coder 7B Q4_K_M فعال شد. پردازش محلی است.");
+                    model7bButton.setText("بازگشت به مدل سبک ۳B");
                     send.setEnabled(true); model7bButton.setEnabled(true);
                 });
             } catch(Throwable e) {
