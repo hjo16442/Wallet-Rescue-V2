@@ -15,6 +15,7 @@ public class WalletCoreTest {
         assertTrue(wallet.btc.matches("^1[1-9A-HJ-NP-Za-km-z]{25,34}$"));
         assertTrue(wallet.eth.matches("^0x[0-9a-fA-F]{40}$"));
         assertTrue(wallet.tron.matches("^T[1-9A-HJ-NP-Za-km-z]{33}$"));
+        assertTrue(AddressScanner.validAddress(wallet.tron, AddressScanner.TRON));
     }
 
     @Test
@@ -41,7 +42,6 @@ public class WalletCoreTest {
     public void validatesPublicAddressesForEachNetwork() {
         assertTrue(AddressScanner.validAddress("0x0000000000000000000000000000000000000000", AddressScanner.ETH));
         assertFalse(AddressScanner.validAddress("0x1234", AddressScanner.ETH));
-        assertTrue(AddressScanner.validAddress("TJRabPrwbZy45sbavfcC9bVZb3FutAeN7K", AddressScanner.TRON));
         assertFalse(AddressScanner.validAddress("not-a-tron-address", AddressScanner.TRON));
         assertTrue(AddressScanner.validAddress("1BoatSLRHtKNngkdXEeobR76b53LETtpyT", AddressScanner.BTC));
         assertFalse(AddressScanner.validAddress("invalid-btc", AddressScanner.BTC));
