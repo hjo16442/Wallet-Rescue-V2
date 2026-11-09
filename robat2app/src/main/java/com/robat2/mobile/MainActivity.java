@@ -164,9 +164,10 @@ public class MainActivity extends Activity {
             if(appendFile(data.getData(),collected)) count++; else skipped++;
         }
         final String context=collected.toString();
+        final int selectedCount=count, skippedCount=skipped;
         projectContext=context;
         runOnUiThread(() -> {
-            filesLabel.setText(count+" فایل متنی انتخاب شد"+(skipped>0 ? "؛ "+skipped+" فایل رد شد" : "")+
+            filesLabel.setText(selectedCount+" فایل متنی انتخاب شد"+(skippedCount>0 ? "؛ "+skippedCount+" فایل رد شد" : "")+
                     " — حداکثر ۲۴ هزار نویسه");
             status.setText(count>0 ? "فایل‌ها فقط برای تحلیل محلی خوانده شدند." : "فایل قابل‌خواندن انتخاب نشد.");
         });
