@@ -145,8 +145,11 @@ public final class AddressScanner {
             BigInteger raw = hex.isEmpty() ? BigInteger.ZERO : new BigInteger(hex, 16);
             BigDecimal usdt = new BigDecimal(raw).divide(new BigDecimal("1000000"), 6, RoundingMode.DOWN);
             usdtText = usdt.stripTrailingZeros().toPlainString() + " USDT";
-        } else if (tokenResponse.has("result") && !tokenResponse.optJSONObject("result").optBoolean("result", false)) {
-            usdtText = "نامشخص (قرارداد پاسخ معتبر نداد)";
+        } else {
+            JSONObject contractResult = tokenResponse.optJSONObject("result");
+            if (contractResult == null || !contractResult.optBoolean("result", false)) {
+                usdtText = "نامشخص (قرارداد پاسخ معتبر نداد)";
+            }
         }
         return "TRON: " + address + "\nموجودی TRX: " + trx.stripTrailingZeros().toPlainString() + " TRX\nموجودی USDT-TRC20: " + usdtText + "\nمنبع: TronGrid public API";
     }
