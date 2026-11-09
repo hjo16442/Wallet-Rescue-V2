@@ -32,7 +32,7 @@ public class MainActivity extends Activity {
     private static final int EXPORT_PROJECT_FILE = 4103;
     private EditText input;
     private TextView status, conversation, filesLabel;
-    private Button send, clear, pickFiles, saveAnswer, exportProject, stop, validateProject, restoreProject, model7bButton;
+    private Button send, clear, pickFiles, saveAnswer, exportProject, stop, validateProject, restoreProject, model7bButton, analyzeProject;
     private Spinner modeSelector;
     private String selectedMode = "مهندس خودکار";
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -111,10 +111,12 @@ public class MainActivity extends Activity {
         fileActions.addView(exportProject,new LinearLayout.LayoutParams(0,-2,1));
         LinearLayout.LayoutParams fp=params(); fp.topMargin=dp(4); root.addView(fileActions,fp);
 
-        validateProject = new Button(this); validateProject.setText("بررسی پروژه");
+        validateProject = new Button(this); validateProject.setText("بررسی ساختار فایل‌ها");
+        analyzeProject = new Button(this); analyzeProject.setText("تحلیل مهندسی و امنیت پروژه");
         restoreProject = new Button(this); restoreProject.setText("بازگردانی نسخه پشتیبان");
         LinearLayout.LayoutParams rp=params(); rp.topMargin=dp(2); root.addView(restoreProject,rp);
         LinearLayout.LayoutParams vp=params(); vp.topMargin=dp(2); root.addView(validateProject,vp);
+        LinearLayout.LayoutParams xp=params(); xp.topMargin=dp(2); root.addView(analyzeProject,xp);
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
@@ -133,6 +135,7 @@ public class MainActivity extends Activity {
         saveAnswer.setOnClickListener(v -> saveLastAnswer());
         exportProject.setOnClickListener(v -> exportProjectZip());
         validateProject.setOnClickListener(v -> runProjectValidation());
+        analyzeProject.setOnClickListener(v -> runProjectAnalysis());
         restoreProject.setOnClickListener(v -> restoreProjectBackup());
         model7bButton.setOnClickListener(v -> { if(modelFile!=null && modelFile.getName().toLowerCase(java.util.Locale.ROOT).contains("7b")) switchTo3BModel(); else confirm7BModel(); });
         prepareModel();
@@ -513,6 +516,20 @@ public class MainActivity extends Activity {
                 append("\n\n"+result);
                 status.setText("بررسی ایستای پروژه تمام شد.");
                 validateProject.setEnabled(true);
+            });
+        });
+    }
+
+    private void runProjectAnalysis() {
+        if(generating) { status.setText("ابتدا تولید پاسخ تمام شود."); return; }
+        analyzeProject.setEnabled(false);
+        status.setText("در حال تحلیل ساختار، تست‌ها، وابستگی‌ها و امنیت پروژه...");
+        worker.execute(() -> {
+            String result=ProjectAnalyzer.analyze(getFilesDir());
+            runOnUiThread(() -> {
+                append("\n\n"+result);
+                status.setText("تحلیل مهندسی پروژه تمام شد؛ هیچ کدی اجرا نشد.");
+                analyzeProject.setEnabled(true);
             });
         });
     }
