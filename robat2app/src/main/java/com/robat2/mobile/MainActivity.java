@@ -163,8 +163,9 @@ public class MainActivity extends Activity {
                         LocalModelEngine.loadModel(three.getAbsolutePath());
             } catch(IOException ignored) { ok=false; }
             if(ok) { modelFile=three; modelReady=true; }
+            final boolean success = ok;
             runOnUiThread(() -> {
-                status.setText(ok?"مدل سبک ۳B فعال شد.":"بازگشت به مدل ۳B ناموفق بود؛ فضای حافظه را بررسی کن.");
+                status.setText(success?"مدل سبک ۳B فعال شد.":"بازگشت به مدل ۳B ناموفق بود؛ فضای حافظه را بررسی کن.");
                 model7bButton.setText("دانلود / فعال‌سازی مدل برنامه‌نویسی ۷B (۴٫۷ گیگابایت)");
                 model7bButton.setEnabled(true); send.setEnabled(modelReady);
             });
