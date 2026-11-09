@@ -21,8 +21,8 @@ public class MainActivity extends Activity {
     private static final String PREFS = "robat2_settings";
     private static final String HISTORY_KEY = "conversation_history";
     private static final long MIN_MODEL_BYTES = 1500000000L;
-    private static final int MAX_HISTORY_CHARS = 9000;
-    private static final int MAX_PROJECT_CHARS = 24000;
+    private static final int MAX_HISTORY_CHARS = 3500;
+    private static final int MAX_PROJECT_CHARS = 6000;
     private static final int PICK_PROJECT_FILES = 4101;
     private static final int SAVE_RESPONSE_FILE = 4102;
     private EditText input;
@@ -168,7 +168,7 @@ public class MainActivity extends Activity {
         projectContext=context;
         runOnUiThread(() -> {
             filesLabel.setText(selectedCount+" فایل متنی انتخاب شد"+(skippedCount>0 ? "؛ "+skippedCount+" فایل رد شد" : "")+
-                    " — حداکثر ۲۴ هزار نویسه");
+                    " — حداکثر ۶ هزار نویسه");
             status.setText(selectedCount>0 ? "فایل‌ها فقط برای تحلیل محلی خوانده شدند." : "فایل قابل‌خواندن انتخاب نشد.");
         });
     }
@@ -185,7 +185,7 @@ public class MainActivity extends Activity {
         try(InputStream in=getContentResolver().openInputStream(uri);
             ByteArrayOutputStream bytes=new ByteArrayOutputStream()) {
             if(in==null) return false;
-            byte[] buf=new byte[4096]; int n; int limit=Math.min(100000,MAX_PROJECT_CHARS-out.length());
+            byte[] buf=new byte[4096]; int n; int limit=Math.min(30000,MAX_PROJECT_CHARS-out.length());
             while((n=in.read(buf))!=-1 && bytes.size()<limit) bytes.write(buf,0,Math.min(n,limit-bytes.size()));
             String content=new String(bytes.toByteArray(),StandardCharsets.UTF_8);
             if(content.indexOf('\u0000')>=0) return false;
