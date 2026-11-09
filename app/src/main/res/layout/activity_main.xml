@@ -9,14 +9,15 @@
 <TextView android:id="@+id/statusText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="آماده" android:paddingTop="8dp" android:textStyle="bold"/>
 <TextView android:id="@+id/walletText" android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="monospace" android:textIsSelectable="true" android:textSize="14sp" android:padding="8dp" android:background="#F4F4F4"/>
 <View android:layout_width="match_parent" android:layout_height="1dp" android:layout_marginTop="12dp" android:background="#999999"/>
-<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="بررسی موجودی آدرس عمومی بیت‌کوین (BTC)" android:textStyle="bold" android:paddingTop="10dp"/>
-<EditText android:id="@+id/inputText" android:layout_width="match_parent" android:layout_height="wrap_content" android:minLines="3" android:maxLines="6" android:gravity="top|start" android:fontFamily="monospace" android:inputType="textMultiLine|textNoSuggestions" android:hint="آدرس BTC در هر خط"/>
-<Button android:id="@+id/startBtn" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="بررسی موجودی BTC"/>
+<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="بررسی موجودی آدرس عمومی در شبکه انتخاب‌شده" android:textStyle="bold" android:paddingTop="10dp"/>
+<Spinner android:id="@+id/networkSpinner" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp"/>
+<EditText android:id="@+id/inputText" android:layout_width="match_parent" android:layout_height="wrap_content" android:minLines="3" android:maxLines="6" android:gravity="top|start" android:fontFamily="monospace" android:inputType="textMultiLine|textNoSuggestions" android:hint="آدرس عمومی شبکه انتخاب‌شده را در هر خط وارد کنید"/>
+<Button android:id="@+id/startBtn" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="بررسی موجودی شبکه انتخاب‌شده"/>
 <Button android:id="@+id/stopBtn" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="توقف بررسی" android:enabled="false"/>
 <TextView android:id="@+id/speedText" android:layout_width="match_parent" android:layout_height="wrap_content" android:text=" "/>
-<TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="نتیجه بررسی BTC:" android:textStyle="bold"/>
+<TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="نتیجه بررسی:" android:textStyle="bold"/>
 <ScrollView android:id="@+id/outputScroll" android:layout_width="match_parent" android:layout_height="220dp" android:background="#F5F5F5" android:padding="8dp">
 <TextView android:id="@+id/outputText" android:layout_width="match_parent" android:layout_height="wrap_content" android:fontFamily="monospace" android:textIsSelectable="true" android:textSize="13sp"/>
 </ScrollView>
-<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="10dp" android:text="امنیت: عبارت بازیابی را عکس نگیرید یا در پیام‌رسان نفرستید. این نسخه هنوز بکاپ رمزگذاری‌شده و بررسی موجودی ETH/TRON را ندارد."/>
+<TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="10dp" android:text="امنیت: عبارت بازیابی را عکس نگیرید یا در پیام‌رسان نفرستید. بررسی عمومی BTC، ETH، TRX و USDT-TRC20 در دسترس است؛ بکاپ رمزگذاری‌شده هنوز پیاده‌سازی نشده است."/>
 </LinearLayout></ScrollView>
