@@ -189,8 +189,8 @@ public class MainActivity extends Activity {
         final int selectedCount=count, skippedCount=skipped;
         projectContext=context;
         runOnUiThread(() -> {
-            filesLabel.setText(selectedCount+" فایل متنی انتخاب شد"+(skippedCount>0 ? "؛ "+skippedCount+" فایل رد شد" : "")+
-                    " — حداکثر ۶ هزار نویسه");
+            filesLabel.setText(selectedCount+" مورد انتخاب شد"+(skippedCount>0 ? "؛ "+skippedCount+" مورد رد شد" : "")+
+                    " | کتابخانه پایدار: "+ProjectLibrary.stats(getFilesDir()));
             status.setText(selectedCount>0 ? "فایل‌ها فقط برای تحلیل محلی خوانده شدند." : "فایل قابل‌خواندن انتخاب نشد.");
         });
     }
