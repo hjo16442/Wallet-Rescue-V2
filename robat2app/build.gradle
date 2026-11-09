@@ -31,3 +31,40 @@ android {
         jniLibs { useLegacyPackaging = true }
     }
 }
+
+def offlineModel = file('src/main/assets/robat2-model.gguf')
+tasks.register('downloadOfflineModel') {
+    outputs.file(offlineModel)
+    doLast {
+        if (!offlineModel.exists() || offlineModel.length() != 1720000000L) {
+            offlineModel.parentFile.mkdirs()
+            def url = new URL('https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/qwen2.5-coder-3b-instruct-q3_k_m.gguf')
+            def temp = new File(offlineModel.parentFile, 'robat2-model.gguf.part')
+            url.openConnection().with { conn ->
+                connectTimeout = 30000
+                readTimeout = 120000
+                inputStream.withCloseable { input ->
+                    temp.withOutputStream { output -> output << input }
+                }
+            }
+            if (temp.length() < 1500000000L) {
+                temp.delete()
+                throw new GradleException('Offline model download is incomplete.')
+            }
+            def digest = java.security.MessageDigest.getInstance('SHA-256')
+            temp.withInputStream { stream ->
+                byte[] buffer = new byte[1024 * 1024]
+                int count
+                while ((count = stream.read(buffer)) > 0) digest.update(buffer, 0, count)
+            }
+            def checksum = digest.digest().collect { String.format('%02x', it) }.join()
+            if (checksum != 'fc3937db7dda9d9ef68ce1f63b5a84ac850ec3c07578461d645e5a88509348e3') {
+                temp.delete()
+                throw new GradleException('Offline model SHA-256 verification failed.')
+            }
+            if (offlineModel.exists()) offlineModel.delete()
+            if (!temp.renameTo(offlineModel)) throw new GradleException('Cannot move verified model into assets.')
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn tasks.named('downloadOfflineModel') }
