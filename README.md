@@ -1,35 +1,24 @@
 # Wallet-Rescue-V2
 
-## Robat2 — دستیار هوشمند توسعه پروژه
+## Robat2 Offline AI
 
-ربات Robat2 برای بررسی و اصلاح کد پروژه از طریق Pull Request استفاده می‌شود.
+Robat2 is being converted into an on-device coding assistant. The offline branch removes the GitHub token and cloud API workflow from the Android app. The app manifest intentionally has no INTERNET permission.
 
-### راه‌اندازی
-1. در GitHub → Settings → Secrets and variables → Actions، مقدار GEMINI_API_KEY را به‌عنوان Repository Secret ثبت کنید.
-2. در Settings → Actions → General → Workflow permissions، گزینه Read and write permissions را فعال کنید.
-3. یک Pull Request در همین مخزن باز کنید. ربات فقط روی PRهای همین مخزن کار می‌کند.
+### Offline architecture
+- Native inference: llama.cpp built for Android arm64-v8a with Android NDK.
+- Model: Qwen2.5-Coder-3B-Instruct GGUF, Q3_K_M quantization.
+- Model asset is downloaded and SHA-256 verified at build time, then bundled into the Robat2 APK.
+- On first launch the model is copied into app-private storage and loaded locally.
+- Runtime prompts and generated responses remain on the device; no network client is included in the Robat2 app.
 
-### استفاده از ربات
-- برای بررسی کامل و فقط خواندنی مخزن، در گفت‌وگوی PR بنویسید: /audit
-- برای اجرای درخواست برنامه‌نویسی، بنویسید: /fix توضیح دقیق کاری که باید انجام شود
+### Build
+The Android Gradle build downloads the model from the official Qwen Hugging Face repository, verifies SHA-256, builds llama.cpp through CMake, and packages the model into the APK. The workflow requires Android NDK 27.2.12479018 and CMake 3.22.1.
 
-نمونه: /fix خطای نمایش موجودی را پیدا و اصلاح کن؛ سپس هر دو APK را بساز
+Model file: qwen2.5-coder-3b-instruct-q3_k_m.gguf
+Expected SHA-256: fc3937db7dda9d9ef68ce1f63b5a84ac850ec3c07578461d645e5a88509348e3
 
-در برنامه اندرویدی Robat2 می‌توانید سطح ۱، ۲ یا ۳ را برای اجرای درخواست انتخاب کنید؛ دکمه بررسی کامل پروژه همچنان فقط ممیزی خواندنی انجام می‌دهد.
-برای شاخه توسعه feature/robat2-full-audit-v2 نیز پس از موفقیت ساخت، انتشار آزمایشی APK در GitHub Releases فعال است.
+### Important device requirements
+The model is approximately 1.72 GB. The APK is correspondingly very large, and first launch needs additional free storage to copy the model into app-private storage. Inference also needs several GB of available RAM; performance varies by device and thermal state. This is an initial 3B model, not an unlimited or frontier-scale coding model.
 
-### کنترل‌ها و محدودیت‌های ایمنی
-- ربات فایل‌های متنی مجاز مخزن را بررسی می‌کند و تغییرات مرتبط را پیشنهاد و اعمال می‌کند.
-- هر درخواست به مراحل اجرایی مشخص تقسیم می‌شود و خلاصه مراحل در پاسخ نهایی نمایش داده می‌شود.
-- سابقه محدود گفت‌وگوی مجاز همان PR برای حفظ پیوستگی درخواست‌های بعدی به مدل داده می‌شود.
-- پس از پیاده‌سازی، git diff --check، تست Maven، تست‌های Gradle و ساخت Android اجرا می‌شوند.
-- سه پروفایل اجرایی در برنامه وجود دارد: سطح ۱ برای تغییر متمرکز، سطح ۲ برای مهندسی چندفایلی و اصلاح کنترل‌شده، و سطح ۳ برای برنامه‌ریزی تا آماده‌سازی انتشار؛ سطح بالاتر مجوزهای امنیتی بیشتری ایجاد نمی‌کند.
-- تعداد فایل‌های قابل بررسی و اصلاح، اندازه فایل‌ها و دفعات اصلاح خودکار از طرف Robat2 سقف عددی ثابت ندارند؛ اصلاح تا رسیدن به نتیجه معتبر یا برخورد با محدودیت واقعی سرویس/مجوز ادامه می‌یابد.
-- خطاهای موقت Gemini با تلاش مجدد مدیریت می‌شوند؛ تمام شدن سهمیه یا خطای پایدار باید صریح گزارش شود.
-- فایل‌های workflow، کلیدها، رمزها، فایل‌های امضا و فایل‌های باینری قابل ویرایش توسط مدل نیستند.
-- ربات فایل‌ها را حذف نمی‌کند، روی PR خارجی کار نمی‌کند و PR را خودکار ادغام نمی‌کند.
-- هر تغییر روی شاخه همان PR ثبت می‌شود؛ مالک مخزن باید نتیجه را بازبینی و در صورت رضایت ادغام کند.
-- عبارت بازیابی، کلید خصوصی، توکن یا اطلاعات محرمانه را در متن درخواست یا فایل‌های عمومی وارد نکنید.
-
-### نکته
-هیچ سامانه هوش مصنوعی تضمین نمی‌کند هر درخواست دلخواه را بدون محدودیت اجرا کند. درخواست دقیق، دسترسی‌های لازم، کلید معتبر Gemini و موفق بودن تست‌ها ضروری است.
+### Wallet Rescue
+Wallet Rescue remains a separate Android module. Its blockchain balance and transaction checks still require internet access. The offline Robat2 module does not gain access to wallet secrets and must never request seed phrases or private keys.
