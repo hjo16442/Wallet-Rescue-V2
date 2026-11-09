@@ -58,8 +58,9 @@ public final class ProjectValidator {
 
     private static void checkJson(String value) throws Exception {
         String s=value.trim();
-        if(!(s.startsWith("{")||s.startsWith("["))) throw new Exception("JSON باید با { یا [ شروع شود.");
-        new JSONTokener(s).nextValue();
+        if(s.startsWith("{")) new org.json.JSONObject(s);
+        else if(s.startsWith("[")) new org.json.JSONArray(s);
+        else throw new Exception("JSON باید با { یا [ شروع شود.");
     }
     private static void checkXml(String value) throws Exception {
         XmlPullParser parser=Xml.newPullParser();
@@ -69,21 +70,23 @@ public final class ProjectValidator {
     }
     private static void checkBrackets(String s) throws Exception {
         ArrayDeque<Character> stack=new ArrayDeque<>();
-        int state=0; boolean escape=false;
+        int state=0;
+        boolean escape=false;
         for(int i=0;i<s.length();i++) {
             char c=s.charAt(i), next=i+1<s.length()?s.charAt(i+1):'\0';
-            if(state==1) { if(c=='\\n') state=0; continue; }
+            if(state==1) { if(c=='\n') state=0; continue; }
             if(state==2) { if(c=='*'&&next=='/') { state=0; i++; } continue; }
             if(state==3||state==4) {
                 if(escape) escape=false;
-                else if(c=='\\\\') escape=true;
-                else if((state==3&&c=='"')||(state==4&&c=='\\'')) state=0;
+                else if(c=='\\') escape=true;
+                else if((state==3&&c=='"')||(state==4&&c=='\''))
+                    state=0;
                 continue;
             }
             if(c=='/'&&next=='/') { state=1; i++; continue; }
             if(c=='/'&&next=='*') { state=2; i++; continue; }
             if(c=='"') { state=3; continue; }
-            if(c=='\\'') { state=4; continue; }
+            if(c=='\'') { state=4; continue; }
             if(c=='('||c=='{'||c=='[') stack.push(c);
             else if(c==')'||c=='}'||c==']') {
                 if(stack.isEmpty()) throw new Exception("براکت بسته اضافی در موقعیت "+i);
@@ -93,7 +96,7 @@ public final class ProjectValidator {
             }
         }
         if(!stack.isEmpty()) throw new Exception("یک یا چند براکت باز بسته نشده است.");
-        if(state==2||state==3||state==4) throw new Exception("رشته یا توضیح چندخطی ناقص است.");
+        if(state==2||state==3||state==4) throw new Exception("رشته یا توضیح ناقص است.");
     }
     private static String read(File file) {
         try(InputStream in=new FileInputStream(file); ByteArrayOutputStream out=new ByteArrayOutputStream()) {
