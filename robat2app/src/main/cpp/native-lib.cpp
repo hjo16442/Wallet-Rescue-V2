@@ -4,6 +4,7 @@
 #include <mutex>
 #include <atomic>
 #include <algorithm>
+#include <cstdint>
 #include "llama.h"
 
 static llama_model * g_model = nullptr;
