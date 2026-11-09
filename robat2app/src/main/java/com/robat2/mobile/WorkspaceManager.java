@@ -27,6 +27,61 @@ public final class WorkspaceManager {
             "Use relative paths only. Include complete files, not diffs. Keep existing features unless asked otherwise.";
     }
 
+
+    /** Import a source ZIP into the editable workspace with path and size limits. */
+    public static String importZip(InputStream source, File filesDir) throws IOException {
+        File root=new File(filesDir,"robat2-workspace");
+        if(!root.exists() && !root.mkdirs()) throw new IOException("ساخت فضای پروژه ناموفق بود.");
+        String canonicalRoot=root.getCanonicalPath()+File.separator;
+        long total=directoryBytes(root), added=0;
+        int saved=0, skipped=0;
+        byte[] buffer=new byte[8192];
+        try(java.util.zip.ZipInputStream zip=new java.util.zip.ZipInputStream(new BufferedInputStream(source))) {
+            java.util.zip.ZipEntry entry;
+            while((entry=zip.getNextEntry())!=null) {
+                if(entry.isDirectory()) { zip.closeEntry(); continue; }
+                String path=entry.getName();
+                if(!safePath(path) || saved+skipped>=20000) { skipped++; zip.closeEntry(); continue; }
+                File target=new File(root,path).getCanonicalFile();
+                if(!target.getPath().startsWith(canonicalRoot)) { skipped++; zip.closeEntry(); continue; }
+                File parent=target.getParentFile();
+                if(parent==null || (!parent.exists()&&!parent.mkdirs())) { skipped++; zip.closeEntry(); continue; }
+                File temp=new File(target.getPath()+".part");
+                long size=0; boolean valid=true;
+                try(OutputStream out=new BufferedOutputStream(new FileOutputStream(temp))) {
+                    int n;
+                    while((n=zip.read(buffer))!=-1) {
+                        size+=n;
+                        if(size>MAX_FILE || total+added+size>MAX_TOTAL) { valid=false; break; }
+                        out.write(buffer,0,n);
+                    }
+                }
+                if(valid && size>0 && !containsNul(temp)) {
+                    long old=target.isFile()?target.length():0;
+                    if(target.exists()) {
+                        File backup=new File(target.getPath()+".robat2-backup");
+                        copy(target,backup);
+                    }
+                    if(target.exists()&&!target.delete()) { temp.delete(); skipped++; }
+                    else if(!temp.renameTo(target)) { temp.delete(); skipped++; }
+                    else { saved++; added+=size-old; }
+                } else { temp.delete(); skipped++; }
+                zip.closeEntry();
+                if(total+added>=MAX_TOTAL) break;
+            }
+        }
+        return "پروژه قابل‌ویرایش: "+saved+" فایل وارد شد، "+skipped+
+            " فایل رد شد؛ "+stats(filesDir);
+    }
+
+    private static boolean containsNul(File file) throws IOException {
+        try(InputStream in=new FileInputStream(file)) {
+            byte[] b=new byte[4096]; int n;
+            while((n=in.read(b))!=-1) for(int i=0;i<n;i++) if(b[i]==0) return true;
+        }
+        return false;
+    }
+
     public static String applyGenerated(String answer, File filesDir) {
         if (answer == null) return "پاسخی برای ساخت فایل وجود ندارد.";
         File root = new File(filesDir, "robat2-workspace");
