@@ -35,6 +35,16 @@ public class WalletCoreTest {
     }
 
     @Test
+    public void validatesPublicAddressesForEachNetwork() {
+        assertTrue(AddressScanner.validAddress("0x0000000000000000000000000000000000000000", AddressScanner.ETH));
+        assertFalse(AddressScanner.validAddress("0x1234", AddressScanner.ETH));
+        assertTrue(AddressScanner.validAddress("TJRabPrwbZy45sbavfcC9bVZb3FutAeN7K", AddressScanner.TRON));
+        assertFalse(AddressScanner.validAddress("not-a-tron-address", AddressScanner.TRON));
+        assertTrue(AddressScanner.validAddress("1BoatSLRHtKNngkdXEeobR76b53LETtpyT", AddressScanner.BTC));
+        assertFalse(AddressScanner.validAddress("invalid-btc", AddressScanner.BTC));
+    }
+
+    @Test
     public void rejectsUnsupportedWordCount() {
         try {
             WalletCore.create(15);
