@@ -23,6 +23,8 @@ public class MainActivity extends Activity {
     private static final String PREFS = "robat2_settings";
     private static final String HISTORY_KEY = "conversation_history";
     private static final long MIN_MODEL_BYTES = 1500000000L;
+    private static final long MODEL_7B_BYTES = 4683073536L;
+    private static final String MODEL_7B_SHA256 = "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c";
     private static final int MAX_HISTORY_CHARS = 3500;
     private static final int MAX_PROJECT_CHARS = 6000;
     private static final int PICK_PROJECT_FILES = 4101;
@@ -160,7 +162,7 @@ public class MainActivity extends Activity {
                 long available=new android.os.StatFs(getFilesDir().getAbsolutePath()).getAvailableBytes();
                 if(!seven.isFile() && available<required)
                     throw new IOException("فضای خالی کافی نیست؛ حداقل ۵٫۵ گیگابایت فضای خالی لازم است.");
-                if(!seven.isFile() || seven.length()<4_500_000_000L) {
+                if(!seven.isFile() || seven.length()!=MODEL_7B_BYTES || !MODEL_7B_SHA256.equals(sha256File(seven))) {
                     temp.delete();
                     java.net.HttpURLConnection connection=(java.net.HttpURLConnection)
                             new java.net.URL("https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf?download=true").openConnection();
@@ -172,21 +174,24 @@ public class MainActivity extends Activity {
                     int code=connection.getResponseCode();
                     long expected=connection.getContentLengthLong();
                     if(code<200 || code>=300) throw new IOException("سرور مدل پاسخ نامعتبر داد: HTTP "+code);
-                    if(expected>0 && expected<4_500_000_000L)
-                        throw new IOException("اندازه فایل دریافتی با مدل ۷B سازگار نیست.");
+                    if(expected>0 && expected!=MODEL_7B_BYTES)
+                        throw new IOException("اندازه فایل دریافتی با نسخه رسمی مدل تطابق ندارد.");
+                    java.security.MessageDigest digest=java.security.MessageDigest.getInstance("SHA-256");
                     try(InputStream in=new BufferedInputStream(connection.getInputStream());
                         OutputStream out=new BufferedOutputStream(new FileOutputStream(temp))) {
                         byte[] buffer=new byte[1024*1024]; long total=0; int n;
                         while((n=in.read(buffer))!=-1) {
-                            out.write(buffer,0,n); total+=n;
+                            out.write(buffer,0,n); digest.update(buffer,0,n); total+=n;
                             if(total%(64L*1024L*1024L)<buffer.length) {
                                 final long done=total;
                                 runOnUiThread(() -> status.setText("دانلود مدل ۷B: "+(done/1073741824L)+" گیگابایت دریافت شد..."));
                             }
                         }
                         out.flush();
-                        if(total<4_500_000_000L || (expected>0 && total!=expected))
-                            throw new IOException("دانلود کامل نیست؛ فایل موقت حذف می‌شود.");
+                        if(total!=MODEL_7B_BYTES || (expected>0 && total!=expected))
+                            throw new IOException("دانلود کامل نیست؛ اندازه فایل صحیح نیست.");
+                        String actualHash=toHex(digest.digest());
+                        if(!MODEL_7B_SHA256.equals(actualHash)) throw new IOException("تطبیق SHA-256 مدل ناموفق بود؛ فایل ناامن/ناقص حذف شد.");
                     } finally { connection.disconnect(); }
                     try(InputStream check=new FileInputStream(temp)) {
                         byte[] magic=new byte[4];
@@ -202,8 +207,7 @@ public class MainActivity extends Activity {
                     modelFile=seven;
                     modelReady=true;
                 } else {
-                    if(previous!=null && previous.isFile()) {
-                        LocalModelEngine.loadModel(previous.getAbsolutePath());
+                    if(previous!=null && previous.isFile() && LocalModelEngine.loadModel(previous.getAbsolutePath())) {
                         modelFile=previous;
                         modelReady=true;
                     } else modelReady=false;
@@ -221,6 +225,23 @@ public class MainActivity extends Activity {
                 });
             }
         });
+    }
+
+    private static String sha256File(File file) throws IOException {
+        try {
+            java.security.MessageDigest digest=java.security.MessageDigest.getInstance("SHA-256");
+            try(InputStream in=new BufferedInputStream(new FileInputStream(file))) {
+                byte[] buffer=new byte[1024*1024]; int n;
+                while((n=in.read(buffer))!=-1) digest.update(buffer,0,n);
+            }
+            return toHex(digest.digest());
+        } catch(java.security.NoSuchAlgorithmException e) { throw new IOException("SHA-256 در دسترس نیست.",e); }
+    }
+
+    private static String toHex(byte[] bytes) {
+        StringBuilder out=new StringBuilder(bytes.length*2);
+        for(byte b:bytes) out.append(String.format(java.util.Locale.ROOT,"%02x",b&0xff));
+        return out.toString();
     }
 
     private void prepareModel() {
