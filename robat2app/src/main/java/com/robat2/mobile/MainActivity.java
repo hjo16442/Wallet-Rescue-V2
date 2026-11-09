@@ -411,7 +411,6 @@ public class MainActivity extends Activity {
         ((InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(),0);
         worker.execute(() -> {
             String system=buildSystemPrompt();
-            boolean compactModel=modelFile!=null && modelFile.getName().toLowerCase(java.util.Locale.ROOT).contains("7b");
             String libraryContext=ProjectLibrary.findRelevant(getFilesDir(),question,compactModel?300:1800);
             String docsContext=ProgrammingDocs.search(question,compactModel?350:1100);
             String libraryCatalogContext=LibraryCatalog.search(question,compactModel?250:1000);
