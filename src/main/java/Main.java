@@ -580,6 +580,7 @@ public class Main {
         String prompt = buildDetailedPrompt(project, userRequest);
         JsonObject body = new JsonObject();
         body.addProperty("model", model);
+        body.addProperty("max_tokens", 20000);
         body.addProperty("temperature", 0.1);
         JsonArray messages = new JsonArray();
         JsonObject system = new JsonObject();
@@ -695,7 +696,7 @@ public class Main {
         JsonObject content = new JsonObject(); content.add("parts", parts);
         JsonArray contents = new JsonArray(); contents.add(content);
         JsonObject config = new JsonObject();
-        config.addProperty("maxOutputTokens", 65536);
+        config.addProperty("maxOutputTokens", 20000);
         config.addProperty("responseMimeType", "application/json");
         JsonObject body = new JsonObject();
         body.add("contents", contents); body.add("generationConfig", config);
