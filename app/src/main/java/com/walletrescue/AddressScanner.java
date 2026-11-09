@@ -130,7 +130,7 @@ public final class AddressScanner {
         byte[] decoded = Base58.decode(address);
         if (decoded.length != 25) throw new Exception("قالب آدرس TRON قابل تبدیل نیست");
         String ownerHex = Hex.toHexString(decoded, 1, 20);
-        String parameter = String.format("%024x", new BigInteger(ownerHex, 16));
+        String parameter = "000000000000000000000000" + ownerHex;
         JSONObject tokenRequest = new JSONObject()
                 .put("owner_address", address)
                 .put("contract_address", USDT_TRC20)
