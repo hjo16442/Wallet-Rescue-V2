@@ -11,6 +11,7 @@ on:
   pull_request:
     branches:
       - main
+      - feature/robat2-full-audit-v2
 
 permissions:
   contents: write
