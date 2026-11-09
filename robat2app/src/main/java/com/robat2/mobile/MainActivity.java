@@ -156,7 +156,12 @@ public class MainActivity extends Activity {
         send.setEnabled(false);
         worker.execute(() -> {
             File three=new File(getFilesDir(),"robat2-model.gguf");
-            boolean ok=three.isFile() && three.length()>=MIN_MODEL_BYTES && MODEL_3B_SHA256.equals(sha256File(three)) && LocalModelEngine.loadModel(three.getAbsolutePath());
+            boolean ok=false;
+            try {
+                ok=three.isFile() && three.length()>=MIN_MODEL_BYTES &&
+                        MODEL_3B_SHA256.equals(sha256File(three)) &&
+                        LocalModelEngine.loadModel(three.getAbsolutePath());
+            } catch(IOException ignored) { ok=false; }
             if(ok) { modelFile=three; modelReady=true; }
             runOnUiThread(() -> {
                 status.setText(ok?"مدل سبک ۳B فعال شد.":"بازگشت به مدل ۳B ناموفق بود؛ فضای حافظه را بررسی کن.");
