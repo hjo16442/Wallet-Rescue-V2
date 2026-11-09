@@ -9,6 +9,7 @@
 static llama_model * g_model = nullptr;
 static std::mutex g_mutex;
 static std::atomic<bool> g_stop_requested{false};
+static uint32_t g_context_size = 4096;
 
 static std::string from_jstring(JNIEnv *env, jstring value) {
     const char *chars = env->GetStringUTFChars(value, nullptr);
@@ -28,6 +29,7 @@ Java_com_robat2_mobile_LocalModelEngine_loadModel(JNIEnv *env, jclass, jstring p
     llama_model_params params = llama_model_default_params();
     params.use_mmap = true;
     const std::string model_path = from_jstring(env, path);
+    g_context_size = model_path.find("7b") != std::string::npos || model_path.find("7B") != std::string::npos ? 2048 : 4096;
     g_model = llama_model_load_from_file(model_path.c_str(), params);
     return g_model ? JNI_TRUE : JNI_FALSE;
 }
@@ -47,8 +49,8 @@ Java_com_robat2_mobile_LocalModelEngine_generate(JNIEnv *env, jclass, jstring pr
         return env->NewStringUTF("خطا در پردازش درخواست.");
 
     llama_context_params cp = llama_context_default_params();
-    cp.n_ctx = 4096;
-    cp.n_batch = std::min(512, std::max(32, token_count));
+    cp.n_ctx = g_context_size;
+    cp.n_batch = std::min(g_context_size == 2048 ? 256 : 512, std::max(32, token_count));
     cp.n_threads = 4;
     cp.n_threads_batch = 4;
     llama_context * ctx = llama_init_from_model(g_model, cp);
