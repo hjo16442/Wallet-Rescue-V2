@@ -88,7 +88,7 @@ public class MainActivity extends AppCompatActivity{
     report.append("Bitcoin BTC\nآدرس: ").append(w.btc).append("\nمسیر: ").append(w.btcPath).append("\n\n");
     report.append("Ethereum ETH\nآدرس: ").append(w.eth).append("\nمسیر: ").append(w.ethPath).append("\n\n");
     report.append("TRON / TRC20\nآدرس: ").append(w.tron).append("\nمسیر: ").append(w.tronPath).append("\n\n");
-    report.append("موجودی‌ها هنوز بررسی نشده‌اند. برای بررسی BTC، آدرس را در بخش پایین وارد کنید.\n\n");
+    report.append("موجودی‌ها هنوز بررسی نشده‌اند. شبکه را در بخش پایین انتخاب و آدرس عمومی را وارد کنید.\n\n");
     report.append("هشدار: عبارت بازیابی و کلید خصوصی فقط روی دستگاه نگهداری می‌شوند و به اینترنت ارسال نمی‌شوند.");
     runOnUiThread(()->{
      walletText.setText(report.toString());
@@ -131,10 +131,13 @@ public class MainActivity extends AppCompatActivity{
    if(!s.trim().isEmpty()) list.add(s.trim());
   if(list.isEmpty()){
    // اگر آدرس وارد نشده، از آدرس کیف پول ساخته شده استفاده شود
-   if(currentWallet!=null && currentWallet.btc!=null && !currentWallet.btc.isEmpty()){
-    list.add(currentWallet.btc);
-   } else {
-    statusText.setText("برای بررسی، آدرس عمومی BTC را وارد کنید یا ابتدا کیف پول بسازید.");
+   if(currentWallet!=null){
+    int selected=networkSpinner.getSelectedItemPosition();
+    String ownAddress=selected==0?currentWallet.btc:selected==1?currentWallet.eth:currentWallet.tron;
+    if(ownAddress!=null && !ownAddress.isEmpty()) list.add(ownAddress);
+   }
+   if(list.isEmpty()){
+    statusText.setText("برای بررسی، آدرس عمومی شبکه انتخاب‌شده را وارد کنید یا ابتدا کیف پول بسازید.");
     return;
    }
   }
