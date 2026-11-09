@@ -2,11 +2,13 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include <atomic>
 #include <algorithm>
 #include "llama.h"
 
 static llama_model * g_model = nullptr;
 static std::mutex g_mutex;
+static std::atomic<bool> g_stop_requested{false};
 
 static std::string from_jstring(JNIEnv *env, jstring value) {
     const char *chars = env->GetStringUTFChars(value, nullptr);
@@ -34,6 +36,7 @@ extern "C" JNIEXPORT jstring JNICALL
 Java_com_robat2_mobile_LocalModelEngine_generate(JNIEnv *env, jclass, jstring prompt_value, jint max_tokens) {
     std::lock_guard<std::mutex> lock(g_mutex);
     if (!g_model) return env->NewStringUTF("مدل هنوز بارگذاری نشده است.");
+    g_stop_requested.store(false);
     const std::string prompt = from_jstring(env, prompt_value);
     const llama_vocab * vocab = llama_model_get_vocab(g_model);
     const int token_count = -llama_tokenize(vocab, prompt.c_str(), (int)prompt.size(), nullptr, 0, true, true);
@@ -63,6 +66,7 @@ Java_com_robat2_mobile_LocalModelEngine_generate(JNIEnv *env, jclass, jstring pr
     std::vector<char> piece(8192);
     const int limit = std::min(2048, std::max(1, (int)max_tokens));
     for (int i = 0; i < limit; ++i) {
+        if (g_stop_requested.load()) break;
         llama_token token = llama_sampler_sample(sampler, ctx, -1);
         if (llama_vocab_is_eog(vocab, token)) break;
         const int n = llama_token_to_piece(vocab, token, piece.data(), (int)piece.size(), 0, true);
@@ -83,4 +87,9 @@ Java_com_robat2_mobile_LocalModelEngine_release(JNIEnv *, jclass) {
         llama_model_free(g_model);
         g_model = nullptr;
     }
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_robat2_mobile_LocalModelEngine_requestStop(JNIEnv *, jclass) {
+    g_stop_requested.store(true);
 }

@@ -27,7 +27,7 @@ public class MainActivity extends Activity {
     private static final int SAVE_RESPONSE_FILE = 4102;
     private EditText input;
     private TextView status, conversation, filesLabel;
-    private Button send, clear, pickFiles, saveAnswer;
+    private Button send, clear, pickFiles, saveAnswer, stop;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private File modelFile;
     private final StringBuilder history = new StringBuilder();
@@ -88,12 +88,15 @@ public class MainActivity extends Activity {
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         send = new Button(this); send.setText("ارسال"); send.setEnabled(false);
+        stop = new Button(this); stop.setText("توقف"); stop.setEnabled(false);
         clear = new Button(this); clear.setText("گفتگوی جدید");
         actions.addView(send,new LinearLayout.LayoutParams(0,-2,2));
+        actions.addView(stop,new LinearLayout.LayoutParams(0,-2,1));
         actions.addView(clear,new LinearLayout.LayoutParams(0,-2,1));
         LinearLayout.LayoutParams ap=params(); ap.topMargin=dp(2); root.addView(actions,ap);
         setContentView(root);
         send.setOnClickListener(v -> submit());
+        stop.setOnClickListener(v -> stopGeneration());
         clear.setOnClickListener(v -> clearConversation());
         pickFiles.setOnClickListener(v -> openProjectPicker());
         saveAnswer.setOnClickListener(v -> saveLastAnswer());
@@ -207,12 +210,22 @@ public class MainActivity extends Activity {
         return name.replace("\n","_").replace("\r","_");
     }
 
+    private void stopGeneration() {
+        if (!generating) return;
+        stopRequested=true;
+        stop.setEnabled(false);
+        status.setText("درخواست توقف ارسال شد؛ منتظر آزادشدن مدل...");
+        LocalModelEngine.requestStop();
+    }
+
+    private volatile boolean stopRequested=false;
+
     private void submit() {
         final String question=input.getText().toString().trim();
         if(question.isEmpty() || generating) return;
         if(!modelReady) { status.setText("مدل هنوز آماده نیست."); return; }
         if(question.length()>5000) { status.setText("درخواست را کوتاه‌تر یا به چند بخش تقسیم کن."); return; }
-        generating=true; send.setEnabled(false); pickFiles.setEnabled(false);
+        generating=true; stopRequested=false; send.setEnabled(false); pickFiles.setEnabled(false); stop.setEnabled(true);
         append("\n\nشما: "+question+"\n\nRobat2: در حال بررسی روی گوشی...");
         input.setText("");
         ((InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(input.getWindowToken(),0);
@@ -225,7 +238,9 @@ public class MainActivity extends Activity {
             String answer;
             try { answer=LocalModelEngine.generate(prompt,750); }
             catch(Throwable e) { answer="خطای اجرای مدل: "+safeMessage(e); }
-            if(answer==null || answer.trim().isEmpty()) answer="مدل پاسخ متنی تولید نکرد؛ درخواست را کوتاه‌تر کن.";
+            if(stopRequested && (answer==null || answer.trim().isEmpty())) answer="تولید پاسخ متوقف شد.";
+            else if(answer==null || answer.trim().isEmpty()) answer="مدل پاسخ متنی تولید نکرد؛ درخواست را کوتاه‌تر کن.";
+            if(stopRequested && !answer.equals("تولید پاسخ متوقف شد.")) answer += "\n\n[تولید به درخواست کاربر متوقف شد]";
             synchronized(history) {
                 history.append("<|im_start|>user\n").append(question).append(fileBlock).append("<|im_end|>\n")
                         .append("<|im_start|>assistant\n").append(answer).append("<|im_end|>\n");
@@ -236,7 +251,7 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> {
                 append("\nRobat2: "+result);
                 status.setText("پاسخ با مدل محلی تولید شد؛ اینترنت استفاده نشد.");
-                saveAnswer.setEnabled(true); generating=false;
+                saveAnswer.setEnabled(true); generating=false; stop.setEnabled(false);
                 send.setEnabled(modelReady); pickFiles.setEnabled(true);
             });
         });

@@ -9,4 +9,5 @@ public final class LocalModelEngine {
     public static native boolean loadModel(String modelPath);
     public static native String generate(String prompt, int maxTokens);
     public static native void release();
+    public static native void requestStop();
 }
