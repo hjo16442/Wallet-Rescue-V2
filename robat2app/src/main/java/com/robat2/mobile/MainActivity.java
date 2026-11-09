@@ -351,7 +351,15 @@ public class MainActivity extends Activity {
         status.setText("در حال بررسی ساختار فایل‌های پروژه...");
         worker.execute(() -> {
             String result=ProjectValidator.validate(getFilesDir());
-            runOnUiThread(() -> { append("\\n\\n"+result); status.setText("بررسی ایستای پروژه تمام شد."); validateProject.setEnabled(true); });\n        });\n    }\n\n    private void exportProjectZip() {
+            runOnUiThread(() -> {
+                append("\n\n"+result);
+                status.setText("بررسی ایستای پروژه تمام شد.");
+                validateProject.setEnabled(true);
+            });
+        });
+    }
+
+    private void exportProjectZip() {
         Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("application/zip");
