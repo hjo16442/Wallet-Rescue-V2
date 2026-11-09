@@ -22,6 +22,8 @@ import java.util.zip.ZipInputStream;
 public class MainActivity extends Activity {
     private static final String PREFS = "robat2_settings";
     private static final String HISTORY_KEY = "conversation_history";
+    private static final String MODEL_3B_SHA256 = "fc3937db7dda9d9ef68ce1f63b5a84ac850ec3c07578461d645e5a88509348e3";
+    private static final String MODEL_3B_URL = "https://huggingface.co/Qwen/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/qwen2.5-coder-3b-instruct-q3_k_m.gguf?download=true";
     private static final long MIN_MODEL_BYTES = 1500000000L;
     private static final long MODEL_7B_BYTES = 4683073536L;
     private static final String MODEL_7B_SHA256 = "509287f78cb4d4cf6b3843734733b914b2c158e43e22a7f4bf5e963800894d3c";
@@ -32,7 +34,7 @@ public class MainActivity extends Activity {
     private static final int EXPORT_PROJECT_FILE = 4103;
     private EditText input;
     private TextView status, conversation, filesLabel;
-    private Button send, clear, pickFiles, saveAnswer, exportProject, stop, validateProject, restoreProject, model7bButton, analyzeProject, createProjectButton;
+    private Button send, clear, pickFiles, saveAnswer, exportProject, stop, validateProject, restoreProject, model7bButton, model3bButton, analyzeProject, createProjectButton;
     private boolean projectCreationMode = false;
     private Spinner modeSelector;
     private String selectedMode = "مهندس خودکار";
@@ -75,7 +77,10 @@ public class MainActivity extends Activity {
         modeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         modeSelector.setAdapter(modeAdapter);
         modeSelector.setSelection(1);
+        model3bButton = new Button(this); model3bButton.setText("دانلود / فعال‌سازی مدل اصلی ۳B (حدود ۱٫۷ گیگابایت)");
+        LinearLayout.LayoutParams m3=params(); m3.topMargin=dp(3); root.addView(model3bButton,m3);
         model7bButton = new Button(this); model7bButton.setText("دانلود / فعال‌سازی مدل برنامه‌نویسی ۷B (۴٫۷ گیگابایت)");
+                model3bButton.setText("فعال‌سازی مدل اصلی ۳B");
         LinearLayout.LayoutParams m7=params(); m7.topMargin=dp(3); root.addView(model7bButton,m7);
         modeSelector.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(android.widget.AdapterView<?> parent, android.view.View view, int position, long id) {
@@ -141,6 +146,7 @@ public class MainActivity extends Activity {
         validateProject.setOnClickListener(v -> runProjectValidation());
         analyzeProject.setOnClickListener(v -> runProjectAnalysis());
         restoreProject.setOnClickListener(v -> restoreProjectBackup());
+        model3bButton.setOnClickListener(v -> downloadAndLoad3B());
         model7bButton.setOnClickListener(v -> { if(modelFile!=null && modelFile.getName().toLowerCase(java.util.Locale.ROOT).contains("7b")) switchTo3BModel(); else confirm7BModel(); });
         prepareModel();
     }
@@ -272,28 +278,102 @@ public class MainActivity extends Activity {
         worker.execute(() -> {
             try {
                 modelFile = new File(getFilesDir(), "robat2-model.gguf");
-                if (!modelFile.exists() || modelFile.length() < MIN_MODEL_BYTES) {
-                    runOnUiThread(() -> status.setText("در حال کپی مدل ۱٫۷ گیگابایتی؛ برنامه را نبند..."));
-                    File temp = new File(getFilesDir(), "robat2-model.gguf.part");
-                    try (InputStream in=getAssets().open("robat2-model.gguf");
-                         OutputStream out=new BufferedOutputStream(new FileOutputStream(temp))) {
-                        byte[] buffer=new byte[1024*1024]; int n;
-                        while((n=in.read(buffer))!=-1) out.write(buffer,0,n);
-                    }
-                    if(temp.length()<MIN_MODEL_BYTES) { temp.delete(); throw new IOException("فایل مدل ناقص است."); }
-                    if(modelFile.exists()) modelFile.delete();
-                    if(!temp.renameTo(modelFile)) { temp.delete(); throw new IOException("ذخیره مدل ناموفق بود."); }
+                if (!modelFile.isFile() || modelFile.length() < MIN_MODEL_BYTES ||
+                        !MODEL_3B_SHA256.equals(sha256File(modelFile))) {
+                    modelReady=false;
+                    runOnUiThread(() -> {
+                        status.setText("برای استفاده، مدل اصلی ۳B را یک‌بار دانلود کن. پس از دانلود، اجرای مدل آفلاین است.");
+                        send.setEnabled(false);
+                    });
+                    return;
                 }
-                runOnUiThread(() -> status.setText("مدل کپی شد؛ در حال بارگذاری..."));
+                runOnUiThread(() -> status.setText("مدل تأیید شد؛ در حال بارگذاری روی گوشی..."));
                 boolean ok=LocalModelEngine.loadModel(modelFile.getAbsolutePath());
                 modelReady=ok;
                 runOnUiThread(() -> {
-                    status.setText(ok ? "مدل آفلاین آماده است." : "بارگذاری مدل ناموفق؛ RAM و فضای خالی را بررسی کن.");
+                    status.setText(ok ? "مدل اصلی ۳B آماده است؛ پردازش روی گوشی انجام می‌شود." : "بارگذاری مدل ناموفق؛ RAM گوشی را بررسی کن.");
                     send.setEnabled(ok);
                 });
             } catch(Throwable e) {
                 modelReady=false;
                 runOnUiThread(() -> status.setText("آماده‌سازی ناموفق: "+safeMessage(e)));
+            }
+        });
+    }
+
+    private void downloadAndLoad3B() {
+        if(generating) { status.setText("ابتدا پاسخ فعلی تمام شود."); return; }
+        model3bButton.setEnabled(false);
+        model7bButton.setEnabled(false);
+        send.setEnabled(false);
+        status.setText("در حال بررسی مدل اصلی ۳B و فضای ذخیره‌سازی...");
+        worker.execute(() -> {
+            File three=new File(getFilesDir(),"robat2-model.gguf");
+            File temp=new File(getFilesDir(),"robat2-model.gguf.part");
+            File previous=modelFile;
+            try {
+                long available=new android.os.StatFs(getFilesDir().getAbsolutePath()).getAvailableBytes();
+                if((!three.isFile() || !MODEL_3B_SHA256.equals(sha256File(three))) && available<2_000_000_000L)
+                    throw new IOException("برای دانلود مدل ۳B حداقل ۲ گیگابایت فضای خالی لازم است.");
+                if(!three.isFile() || three.length()<MIN_MODEL_BYTES ||
+                        !MODEL_3B_SHA256.equals(sha256File(three))) {
+                    if(temp.exists() && !temp.delete()) throw new IOException("پاک‌کردن دانلود ناقص قبلی ناموفق بود.");
+                    java.net.HttpURLConnection connection=(java.net.HttpURLConnection)
+                            new java.net.URL(MODEL_3B_URL).openConnection();
+                    connection.setConnectTimeout(30000);
+                    connection.setReadTimeout(180000);
+                    connection.setInstanceFollowRedirects(true);
+                    connection.setRequestProperty("User-Agent","Robat2-Android/4.8");
+                    connection.connect();
+                    int code=connection.getResponseCode();
+                    if(code<200 || code>=300) throw new IOException("سرور مدل پاسخ نامعتبر داد: HTTP "+code);
+                    java.security.MessageDigest digest=java.security.MessageDigest.getInstance("SHA-256");
+                    long total=0;
+                    try(InputStream in=new BufferedInputStream(connection.getInputStream());
+                        OutputStream out=new BufferedOutputStream(new FileOutputStream(temp))) {
+                        byte[] buffer=new byte[1024*1024]; int n;
+                        while((n=in.read(buffer))!=-1) {
+                            out.write(buffer,0,n); digest.update(buffer,0,n); total+=n;
+                            if(total%(64L*1024L*1024L)<buffer.length) {
+                                final long done=total;
+                                runOnUiThread(() -> status.setText("دریافت مدل ۳B: "+(done/1073741824L)+" گیگابایت دانلود شد..."));
+                            }
+                        }
+                        out.flush();
+                    } finally { connection.disconnect(); }
+                    if(total<MIN_MODEL_BYTES) throw new IOException("دانلود کامل نیست؛ حجم مدل کمتر از حد معتبر است.");
+                    if(!MODEL_3B_SHA256.equals(toHex(digest.digest())))
+                        throw new IOException("بررسی SHA-256 ناموفق بود؛ فایل ناقص یا تغییرکرده است.");
+                    try(InputStream check=new FileInputStream(temp)) {
+                        byte[] magic=new byte[4];
+                        if(check.read(magic)!=4 || magic[0]!='G' || magic[1]!='G' || magic[2]!='U' || magic[3]!='F')
+                            throw new IOException("فایل دانلودشده قالب GGUF معتبر ندارد.");
+                    }
+                    if(three.exists() && !three.delete()) throw new IOException("جایگزینی مدل قبلی ناموفق بود.");
+                    if(!temp.renameTo(three)) throw new IOException("ذخیره مدل تأییدشده ناموفق بود.");
+                }
+                runOnUiThread(() -> status.setText("مدل ۳B تأیید شد؛ در حال بارگذاری..."));
+                boolean ok=LocalModelEngine.loadModel(three.getAbsolutePath());
+                if(!ok) {
+                    if(previous!=null && previous.isFile() && LocalModelEngine.loadModel(previous.getAbsolutePath())) {
+                        modelFile=previous; modelReady=true;
+                    } else modelReady=false;
+                    throw new IOException("مدل دانلود شد اما در RAM گوشی بارگذاری نشد؛ مدل قبلی حذف نشده است.");
+                }
+                modelFile=three; modelReady=true;
+                runOnUiThread(() -> {
+                    status.setText("مدل اصلی ۳B فعال شد. برای تولید پاسخ می‌توانی اینترنت را قطع کنی.");
+                    send.setEnabled(true);
+                    model3bButton.setText("مدل اصلی ۳B آماده است");
+                    model3bButton.setEnabled(true); model7bButton.setEnabled(true);
+                });
+            } catch(Throwable e) {
+                temp.delete();
+                runOnUiThread(() -> {
+                    status.setText("دانلود/فعال‌سازی مدل ۳B ناموفق: "+safeMessage(e));
+                    send.setEnabled(modelReady);
+                    model3bButton.setEnabled(true); model7bButton.setEnabled(true);
+                });
             }
         });
     }
