@@ -578,10 +578,6 @@ public class Main {
                                                    String apiKey, String endpoint, String model,
                                                    String provider) throws Exception {
         String prompt = buildDetailedPrompt(project, userRequest);
-        JsonObject body = new JsonObject();
-        body.addProperty("model", model);
-        body.addProperty("max_tokens", 20000);
-        body.addProperty("temperature", 0.1);
         JsonArray messages = new JsonArray();
         JsonObject system = new JsonObject();
         system.addProperty("role", "system");
@@ -591,42 +587,69 @@ public class Main {
         user.addProperty("role", "user");
         user.addProperty("content", prompt);
         messages.add(user);
-        body.add("messages", messages);
-        JsonObject responseFormat = new JsonObject();
-        responseFormat.addProperty("type", "json_object");
-        body.add("response_format", responseFormat);
 
-        Request request = new Request.Builder().url(endpoint)
-                .addHeader("Authorization", "Bearer " + apiKey)
-                .addHeader("Content-Type", "application/json")
-                .post(RequestBody.create(body.toString(), MediaType.parse("application/json")))
-                .build();
-        for (int attempt = 1; attempt <= 2; attempt++) {
-            try (Response response = HTTP.newCall(request).execute()) {
-                String raw = response.body() == null ? "" : response.body().string();
-                if (!response.isSuccessful()) {
-                    int status = response.code();
-                    if ((status == 429 || status >= 500) && attempt == 1
-                            && !isPermanentQuotaError(raw)) {
-                        long retry = parseRetryAfterSeconds(response.header("Retry-After"), raw);
-                        Thread.sleep((retry >= 0 ? Math.min(retry, 30L) : 3L) * 1000L);
-                        continue;
+        // Reduce output size only when the provider explicitly reports that the
+        // requested token budget exceeds the available credit/budget.
+        int[] tokenBudgets = {20000, 16000, 12000, 8000, 4000};
+        String lastCreditError = null;
+        for (int tokenBudget : tokenBudgets) {
+            JsonObject body = new JsonObject();
+            body.addProperty("model", model);
+            body.addProperty("max_tokens", tokenBudget);
+            body.addProperty("temperature", 0.1);
+            body.add("messages", messages);
+            JsonObject responseFormat = new JsonObject();
+            responseFormat.addProperty("type", "json_object");
+            body.add("response_format", responseFormat);
+
+            Request request = new Request.Builder().url(endpoint)
+                    .addHeader("Authorization", "Bearer " + apiKey)
+                    .addHeader("Content-Type", "application/json")
+                    .post(RequestBody.create(body.toString(), MediaType.parse("application/json")))
+                    .build();
+
+            for (int attempt = 1; attempt <= 2; attempt++) {
+                try (Response response = HTTP.newCall(request).execute()) {
+                    String raw = response.body() == null ? "" : response.body().string();
+                    if (!response.isSuccessful()) {
+                        int status = response.code();
+                        String lower = raw.toLowerCase(Locale.ROOT);
+                        boolean tokenBudgetError = status == 402
+                                && (lower.contains("max_tokens") || lower.contains("fewer max_tokens")
+                                || lower.contains("can only afford") || lower.contains("requested up to"));
+                        if (tokenBudgetError) {
+                            lastCreditError = "HTTP 402 با سقف " + tokenBudget + " توکن: "
+                                    + raw.substring(0, Math.min(600, raw.length()));
+                            System.err.println("Robat2 AI: " + lastCreditError + "; trying a smaller output budget.");
+                            break;
+                        }
+                        if ((status == 429 || status >= 500) && attempt == 1
+                                && !isPermanentQuotaError(raw)) {
+                            long retry = parseRetryAfterSeconds(response.header("Retry-After"), raw);
+                            Thread.sleep((retry >= 0 ? Math.min(retry, 30L) : 3L) * 1000L);
+                            continue;
+                        }
+                        throw new IllegalStateException("HTTP " + status + " از " + provider + ": "
+                                + raw.substring(0, Math.min(600, raw.length())));
                     }
-                    throw new IllegalStateException("HTTP " + status + " از " + provider + ": "
-                            + raw.substring(0, Math.min(600, raw.length())));
+                    JsonObject root = JsonParser.parseString(raw).getAsJsonObject();
+                    JsonArray choices = root.getAsJsonArray("choices");
+                    if (choices == null || choices.isEmpty())
+                        throw new IllegalStateException(provider + " پاسخ choices خالی برگرداند.");
+                    JsonObject message = choices.get(0).getAsJsonObject().getAsJsonObject("message");
+                    if (message == null || !message.has("content"))
+                        throw new IllegalStateException(provider + " محتوای پاسخ را برنگرداند.");
+                    JsonElement content = message.get("content");
+                    String answerText = content.isJsonPrimitive() ? content.getAsString() : content.toString();
+                    System.out.println("Robat2 AI: provider " + provider + " accepted max_tokens=" + tokenBudget);
+                    return parseAiJson(answerText, provider);
                 }
-                JsonObject root = JsonParser.parseString(raw).getAsJsonObject();
-                JsonArray choices = root.getAsJsonArray("choices");
-                if (choices == null || choices.isEmpty())
-                    throw new IllegalStateException(provider + " پاسخ choices خالی برگرداند.");
-                JsonObject message = choices.get(0).getAsJsonObject().getAsJsonObject("message");
-                if (message == null || !message.has("content"))
-                    throw new IllegalStateException(provider + " محتوای پاسخ را برنگرداند.");
-                JsonElement content = message.get("content");
-                String answerText = content.isJsonPrimitive() ? content.getAsString() : content.toString();
-                return parseAiJson(answerText, provider);
             }
+            if (lastCreditError == null || tokenBudget == tokenBudgets[tokenBudgets.length - 1]) break;
         }
+        if (lastCreditError != null)
+            throw new IllegalStateException("اعتبار/بودجه سرویس برای اجرای درخواست کافی نیست؛ سقف خروجی تا ۴۰۰۰ توکن کاهش یافت اما سرویس همچنان درخواست را نپذیرفت. "
+                    + "اعتبار OpenRouter و محدودیت کلید را بررسی کنید. آخرین خطا: " + lastCreditError);
         throw new IllegalStateException(provider + " پس از تلاش محدود پاسخ نداد.");
     }
 
