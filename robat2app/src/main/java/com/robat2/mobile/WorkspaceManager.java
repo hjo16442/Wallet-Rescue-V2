@@ -134,7 +134,8 @@ public final class WorkspaceManager {
         for(String ext:EXT) if(lower.endsWith(ext)) return true;
         return false;
     }
-    private static final class FileScore { final File file; final int score; FileScore(File f,int s){file=f;score=s;} }\n    private static void collect(File dir,List<File> out) {
+    private static final class FileScore { final File file; final int score; FileScore(File f,int s){file=f;score=s;} }
+    private static void collect(File dir,List<File> out) {
         File[] children=dir.listFiles(); if(children==null) return;
         for(File f:children) { if(f.isDirectory()) collect(f,out); else if(f.isFile()) out.add(f); }
     }
