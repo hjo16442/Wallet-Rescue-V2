@@ -30,7 +30,7 @@ public class MainActivity extends Activity {
     private static final int EXPORT_PROJECT_FILE = 4103;
     private EditText input;
     private TextView status, conversation, filesLabel;
-    private Button send, clear, pickFiles, saveAnswer, exportProject, stop, validateProject;
+    private Button send, clear, pickFiles, saveAnswer, exportProject, stop, validateProject, restoreProject;
     private Spinner modeSelector;
     private String selectedMode = "مهندس خودکار";
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -108,6 +108,8 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams fp=params(); fp.topMargin=dp(4); root.addView(fileActions,fp);
 
         validateProject = new Button(this); validateProject.setText("بررسی پروژه");
+        restoreProject = new Button(this); restoreProject.setText("بازگردانی نسخه پشتیبان");
+        LinearLayout.LayoutParams rp=params(); rp.topMargin=dp(2); root.addView(restoreProject,rp);
         LinearLayout.LayoutParams vp=params(); vp.topMargin=dp(2); root.addView(validateProject,vp);
 
         LinearLayout actions = new LinearLayout(this);
@@ -127,6 +129,7 @@ public class MainActivity extends Activity {
         saveAnswer.setOnClickListener(v -> saveLastAnswer());
         exportProject.setOnClickListener(v -> exportProjectZip());
         validateProject.setOnClickListener(v -> runProjectValidation());
+        restoreProject.setOnClickListener(v -> restoreProjectBackup());
         prepareModel();
     }
 
@@ -347,6 +350,20 @@ public class MainActivity extends Activity {
                 status.setText("پاسخ محلی تولید شد. "+workspaceReport+" | "+WorkspaceManager.stats(getFilesDir()));
                 saveAnswer.setEnabled(true); generating=false; stop.setEnabled(false);
                 send.setEnabled(modelReady); pickFiles.setEnabled(true);
+            });
+        });
+    }
+
+    private void restoreProjectBackup() {
+        if(generating) { status.setText("ابتدا تولید پاسخ تمام شود."); return; }
+        restoreProject.setEnabled(false);
+        worker.execute(() -> {
+            String result=WorkspaceManager.restoreBackups(getFilesDir());
+            runOnUiThread(() -> {
+                append("\n\n"+result);
+                filesLabel.setText(WorkspaceManager.stats(getFilesDir()));
+                status.setText(result);
+                restoreProject.setEnabled(true);
             });
         });
     }
