@@ -107,7 +107,10 @@ public class MainActivity extends Activity {
         fileActions.addView(exportProject,new LinearLayout.LayoutParams(0,-2,1));
         LinearLayout.LayoutParams fp=params(); fp.topMargin=dp(4); root.addView(fileActions,fp);
 
-        validateProject = new Button(this); validateProject.setText("بررسی پروژه");\n        LinearLayout.LayoutParams vp=params(); vp.topMargin=dp(2); root.addView(validateProject,vp);\n\n        LinearLayout actions = new LinearLayout(this);
+        validateProject = new Button(this); validateProject.setText("بررسی پروژه");
+        LinearLayout.LayoutParams vp=params(); vp.topMargin=dp(2); root.addView(validateProject,vp);
+
+        LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         send = new Button(this); send.setText("ارسال"); send.setEnabled(false);
         stop = new Button(this); stop.setText("توقف"); stop.setEnabled(false);
@@ -122,7 +125,8 @@ public class MainActivity extends Activity {
         clear.setOnClickListener(v -> clearConversation());
         pickFiles.setOnClickListener(v -> openProjectPicker());
         saveAnswer.setOnClickListener(v -> saveLastAnswer());
-        exportProject.setOnClickListener(v -> exportProjectZip());\n        validateProject.setOnClickListener(v -> runProjectValidation());
+        exportProject.setOnClickListener(v -> exportProjectZip());
+        validateProject.setOnClickListener(v -> runProjectValidation());
         prepareModel();
     }
 
@@ -341,7 +345,13 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void runProjectValidation() {\n        if(generating) { status.setText("ابتدا تولید پاسخ تمام شود."); return; }\n        validateProject.setEnabled(false);\n        status.setText("در حال بررسی ساختار فایل‌های پروژه...");\n        worker.execute(() -> {\n            String result=ProjectValidator.validate(getFilesDir());\n            runOnUiThread(() -> { append("\\n\\n"+result); status.setText("بررسی ایستای پروژه تمام شد."); validateProject.setEnabled(true); });\n        });\n    }\n\n    private void exportProjectZip() {
+    private void runProjectValidation() {
+        if(generating) { status.setText("ابتدا تولید پاسخ تمام شود."); return; }
+        validateProject.setEnabled(false);
+        status.setText("در حال بررسی ساختار فایل‌های پروژه...");
+        worker.execute(() -> {
+            String result=ProjectValidator.validate(getFilesDir());
+            runOnUiThread(() -> { append("\\n\\n"+result); status.setText("بررسی ایستای پروژه تمام شد."); validateProject.setEnabled(true); });\n        });\n    }\n\n    private void exportProjectZip() {
         Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("application/zip");
