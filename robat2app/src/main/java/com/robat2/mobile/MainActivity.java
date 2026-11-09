@@ -30,7 +30,7 @@ public class MainActivity extends Activity {
     private static final int EXPORT_PROJECT_FILE = 4103;
     private EditText input;
     private TextView status, conversation, filesLabel;
-    private Button send, clear, pickFiles, saveAnswer, exportProject, stop, validateProject, restoreProject;
+    private Button send, clear, pickFiles, saveAnswer, exportProject, stop, validateProject, restoreProject, model7bButton;
     private Spinner modeSelector;
     private String selectedMode = "مهندس خودکار";
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -72,6 +72,8 @@ public class MainActivity extends Activity {
         modeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         modeSelector.setAdapter(modeAdapter);
         modeSelector.setSelection(1);
+        model7bButton = new Button(this); model7bButton.setText("دانلود / فعال‌سازی مدل برنامه‌نویسی ۷B (۴٫۷ گیگابایت)");
+        LinearLayout.LayoutParams m7=params(); m7.topMargin=dp(3); root.addView(model7bButton,m7);
         modeSelector.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(android.widget.AdapterView<?> parent, android.view.View view, int position, long id) {
                 selectedMode = modes[position].replace(" (پیشنهادی)", "");
@@ -130,7 +132,95 @@ public class MainActivity extends Activity {
         exportProject.setOnClickListener(v -> exportProjectZip());
         validateProject.setOnClickListener(v -> runProjectValidation());
         restoreProject.setOnClickListener(v -> restoreProjectBackup());
+        model7bButton.setOnClickListener(v -> confirm7BModel());
         prepareModel();
+    }
+
+    private void confirm7BModel() {
+        if(generating) { status.setText("ابتدا پاسخ فعلی تمام شود."); return; }
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("مدل برنامه‌نویسی ۷B")
+                .setMessage("مدل Qwen2.5-Coder با کوانتیزه‌سازی Q4_K_M حدود ۴٫۷ گیگابایت است و جداگانه دانلود می‌شود. اینترنت پایدار و حداقل ۶ گیگابایت فضای خالی لازم است. روی گوشی با RAM هشت گیگابایت ممکن است بارگذاری به علت کمبود حافظه شکست بخورد یا سیستم برنامه را ببندد. مدل ۳B فعلی حذف نمی‌شود. ادامه می‌دهی؟")
+                .setNegativeButton("فعلاً نه", null)
+                .setPositiveButton("ادامه دانلود", (d,w) -> downloadAndLoad7B())
+                .show();
+    }
+
+    private void downloadAndLoad7B() {
+        if(generating) return;
+        model7bButton.setEnabled(false);
+        send.setEnabled(false);
+        status.setText("در حال بررسی فضای ذخیره‌سازی مدل ۷B...");
+        worker.execute(() -> {
+            File seven=new File(getFilesDir(),"robat2-qwen-coder-7b-q4_k_m.gguf");
+            File temp=new File(getFilesDir(),"robat2-qwen-coder-7b-q4_k_m.gguf.part");
+            File previous=modelFile;
+            try {
+                long required=5_500_000_000L;
+                long available=new android.os.StatFs(getFilesDir().getAbsolutePath()).getAvailableBytes();
+                if(!seven.isFile() && available<required)
+                    throw new IOException("فضای خالی کافی نیست؛ حداقل ۵٫۵ گیگابایت فضای خالی لازم است.");
+                if(!seven.isFile() || seven.length()<4_500_000_000L) {
+                    temp.delete();
+                    java.net.HttpURLConnection connection=(java.net.HttpURLConnection)
+                            new java.net.URL("https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/resolve/main/qwen2.5-coder-7b-instruct-q4_k_m.gguf?download=true").openConnection();
+                    connection.setConnectTimeout(30000);
+                    connection.setReadTimeout(120000);
+                    connection.setInstanceFollowRedirects(true);
+                    connection.setRequestProperty("User-Agent","Robat2-Android/4.3");
+                    connection.connect();
+                    int code=connection.getResponseCode();
+                    long expected=connection.getContentLengthLong();
+                    if(code<200 || code>=300) throw new IOException("سرور مدل پاسخ نامعتبر داد: HTTP "+code);
+                    if(expected>0 && expected<4_500_000_000L)
+                        throw new IOException("اندازه فایل دریافتی با مدل ۷B سازگار نیست.");
+                    try(InputStream in=new BufferedInputStream(connection.getInputStream());
+                        OutputStream out=new BufferedOutputStream(new FileOutputStream(temp))) {
+                        byte[] buffer=new byte[1024*1024]; long total=0; int n;
+                        while((n=in.read(buffer))!=-1) {
+                            out.write(buffer,0,n); total+=n;
+                            if(total%(64L*1024L*1024L)<buffer.length) {
+                                final long done=total;
+                                runOnUiThread(() -> status.setText("دانلود مدل ۷B: "+(done/1073741824L)+" گیگابایت دریافت شد..."));
+                            }
+                        }
+                        out.flush();
+                        if(total<4_500_000_000L || (expected>0 && total!=expected))
+                            throw new IOException("دانلود کامل نیست؛ فایل موقت حذف می‌شود.");
+                    } finally { connection.disconnect(); }
+                    try(InputStream check=new FileInputStream(temp)) {
+                        byte[] magic=new byte[4];
+                        if(check.read(magic)!=4 || magic[0]!='G' || magic[1]!='G' || magic[2]!='U' || magic[3]!='F')
+                            throw new IOException("فایل دریافتی قالب GGUF معتبر ندارد.");
+                    }
+                    if(seven.exists() && !seven.delete()) throw new IOException("جایگزینی فایل مدل قبلی ناموفق بود.");
+                    if(!temp.renameTo(seven)) throw new IOException("ذخیره نهایی مدل ناموفق بود.");
+                }
+                runOnUiThread(() -> status.setText("دانلود تمام شد؛ در حال بارگذاری مدل ۷B. ممکن است چند دقیقه طول بکشد..."));
+                boolean ok=LocalModelEngine.loadModel(seven.getAbsolutePath());
+                if(ok) {
+                    modelFile=seven;
+                    modelReady=true;
+                } else {
+                    if(previous!=null && previous.isFile()) {
+                        LocalModelEngine.loadModel(previous.getAbsolutePath());
+                        modelFile=previous;
+                        modelReady=true;
+                    } else modelReady=false;
+                    throw new IOException("مدل ۷B در حافظه گوشی بارگذاری نشد؛ مدل قبلی حفظ/بازیابی شد.");
+                }
+                runOnUiThread(() -> {
+                    status.setText("مدل Qwen2.5-Coder 7B Q4_K_M فعال شد. پردازش محلی است.");
+                    send.setEnabled(true); model7bButton.setEnabled(true);
+                });
+            } catch(Throwable e) {
+                temp.delete();
+                runOnUiThread(() -> {
+                    status.setText("فعال‌سازی مدل ۷B ناموفق: "+safeMessage(e));
+                    send.setEnabled(modelReady); model7bButton.setEnabled(true);
+                });
+            }
+        });
     }
 
     private void prepareModel() {
