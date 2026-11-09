@@ -580,6 +580,8 @@ public class Main {
         String prompt = buildDetailedPrompt(project, userRequest);
         JsonObject body = new JsonObject();
         body.addProperty("model", model);
+        // Start with a useful output budget, then automatically reduce it if
+        // OpenRouter reports that the remaining credits cannot cover the request.
         body.addProperty("temperature", 0.1);
         JsonArray messages = new JsonArray();
         JsonObject system = new JsonObject();
@@ -595,38 +597,55 @@ public class Main {
         responseFormat.addProperty("type", "json_object");
         body.add("response_format", responseFormat);
 
-        Request request = new Request.Builder().url(endpoint)
-                .addHeader("Authorization", "Bearer " + apiKey)
-                .addHeader("Content-Type", "application/json")
-                .post(RequestBody.create(body.toString(), MediaType.parse("application/json")))
-                .build();
-        for (int attempt = 1; attempt <= 2; attempt++) {
-            try (Response response = HTTP.newCall(request).execute()) {
-                String raw = response.body() == null ? "" : response.body().string();
-                if (!response.isSuccessful()) {
-                    int status = response.code();
-                    if ((status == 429 || status >= 500) && attempt == 1
-                            && !isPermanentQuotaError(raw)) {
-                        long retry = parseRetryAfterSeconds(response.header("Retry-After"), raw);
-                        Thread.sleep((retry >= 0 ? Math.min(retry, 30L) : 3L) * 1000L);
-                        continue;
+        int[] tokenBudgets = {20000, 16000, 12000, 8000, 4000};
+        for (int budgetIndex = 0; budgetIndex < tokenBudgets.length; budgetIndex++) {
+            int budget = tokenBudgets[budgetIndex];
+            body.addProperty("max_tokens", budget);
+            Request request = new Request.Builder().url(endpoint)
+                    .addHeader("Authorization", "Bearer " + apiKey)
+                    .addHeader("Content-Type", "application/json")
+                    .post(RequestBody.create(body.toString(), MediaType.parse("application/json")))
+                    .build();
+            System.out.println("Robat2 AI: requesting up to " + budget + " output tokens from " + provider);
+            boolean retryWithSmallerBudget = false;
+            for (int attempt = 1; attempt <= 2; attempt++) {
+                try (Response response = HTTP.newCall(request).execute()) {
+                    String raw = response.body() == null ? "" : response.body().string();
+                    if (!response.isSuccessful()) {
+                        int status = response.code();
+                        if (status == 402 && budgetIndex + 1 < tokenBudgets.length
+                                && (raw.contains("can only afford") || raw.contains("more credits")
+                                    || raw.contains("fewer max_tokens"))) {
+                            System.err.println("Robat2 AI: credits do not cover " + budget
+                                    + " output tokens; retrying with " + tokenBudgets[budgetIndex + 1]);
+                            retryWithSmallerBudget = true;
+                            break;
+                        }
+                        if ((status == 429 || status >= 500) && attempt == 1
+                                && !isPermanentQuotaError(raw)) {
+                            long retry = parseRetryAfterSeconds(response.header("Retry-After"), raw);
+                            Thread.sleep((retry >= 0 ? Math.min(retry, 30L) : 3L) * 1000L);
+                            continue;
+                        }
+                        throw new IllegalStateException("HTTP " + status + " از " + provider + ": "
+                                + raw.substring(0, Math.min(600, raw.length())));
                     }
-                    throw new IllegalStateException("HTTP " + status + " از " + provider + ": "
-                            + raw.substring(0, Math.min(600, raw.length())));
+                    JsonObject root = JsonParser.parseString(raw).getAsJsonObject();
+                    JsonArray choices = root.getAsJsonArray("choices");
+                    if (choices == null || choices.isEmpty())
+                        throw new IllegalStateException(provider + " پاسخ choices خالی برگرداند.");
+                    JsonObject message = choices.get(0).getAsJsonObject().getAsJsonObject("message");
+                    if (message == null || !message.has("content"))
+                        throw new IllegalStateException(provider + " محتوای پاسخ را برنگرداند.");
+                    JsonElement responseContent = message.get("content");
+                    String answerText = responseContent.isJsonPrimitive()
+                            ? responseContent.getAsString() : responseContent.toString();
+                    return parseAiJson(answerText, provider);
                 }
-                JsonObject root = JsonParser.parseString(raw).getAsJsonObject();
-                JsonArray choices = root.getAsJsonArray("choices");
-                if (choices == null || choices.isEmpty())
-                    throw new IllegalStateException(provider + " پاسخ choices خالی برگرداند.");
-                JsonObject message = choices.get(0).getAsJsonObject().getAsJsonObject("message");
-                if (message == null || !message.has("content"))
-                    throw new IllegalStateException(provider + " محتوای پاسخ را برنگرداند.");
-                JsonElement content = message.get("content");
-                String answerText = content.isJsonPrimitive() ? content.getAsString() : content.toString();
-                return parseAiJson(answerText, provider);
             }
+            if (!retryWithSmallerBudget) break;
         }
-        throw new IllegalStateException(provider + " پس از تلاش محدود پاسخ نداد.");
+        throw new IllegalStateException(provider + " پس از تلاش با سقف‌های مختلف توکن پاسخ نداد.");
     }
 
     private static JsonObject parseAiJson(String responseText, String provider) {
@@ -695,7 +714,7 @@ public class Main {
         JsonObject content = new JsonObject(); content.add("parts", parts);
         JsonArray contents = new JsonArray(); contents.add(content);
         JsonObject config = new JsonObject();
-        config.addProperty("maxOutputTokens", 65536);
+        config.addProperty("maxOutputTokens", 20000);
         config.addProperty("responseMimeType", "application/json");
         JsonObject body = new JsonObject();
         body.add("contents", contents); body.add("generationConfig", config);
