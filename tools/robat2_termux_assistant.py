@@ -104,7 +104,7 @@ def choose_files(task):
         selected = [p for p in paths if p.endswith("MainActivity.java")][:1]
     return selected[:4] or paths[:2]
 
-def make_context(paths):
+def make_context(paths, task):
     pieces, used = [], 0
     for rel in paths:
         try:
@@ -119,7 +119,7 @@ def make_context(paths):
         if len(text) > min(remaining - 200, 3200):
             lines = text.splitlines()
             hits = [i for i, line in enumerate(lines)
-                    if any(term.lower() in line.lower() for term in expand_terms(rel))]
+                    if any(term.lower() in line.lower() for term in expand_terms(task))]
             if not hits:
                 hits = list(range(min(55, len(lines))))
             chosen = set()
@@ -273,7 +273,7 @@ def main():
             continue
         try:
             paths = choose_files(task)
-            context = make_context(paths)
+            context = make_context(paths, task)
             if not context:
                 print("فایل مرتبط قابل‌خواندن پیدا نشد.")
                 continue
