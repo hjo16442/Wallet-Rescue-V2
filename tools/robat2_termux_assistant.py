@@ -195,6 +195,51 @@ def explain(task, paths, context):
     )
     return qwen(prompt, 900)
 
+def is_project_review(task):
+    t = task.lower()
+    return any(x in t for x in ("ساختار پروژه", "کل پروژه", "همه فایل", "بررسی کامل پروژه",
+                                "برنامه را بررسی", "پروژه را بررسی", "تمام پروژه"))
+
+def review_project(task):
+    all_paths = files_in_repo()
+    code_ext = {".java", ".kt", ".xml", ".gradle", ".properties", ".json",
+                ".py", ".cpp", ".h", ".c", ".cmake"}
+    paths = [p for p in all_paths if Path(p).suffix.lower() in code_ext]
+    if not paths:
+        print("فایل کد یا پیکربندی مجاز برای بررسی پیدا نشد.")
+        return
+    print(f"بررسی مرحله‌ای شروع شد: {len(paths)} فایل کد و پیکربندی پیدا شد.", flush=True)
+    summaries = []
+    batches = [paths[i:i + 3] for i in range(0, len(paths), 3)]
+    for index, batch in enumerate(batches, 1):
+        context = make_context(batch, task)
+        if not context:
+            continue
+        print(f"مرحله {index} از {len(batches)}: بررسی {', '.join(batch)}", flush=True)
+        prompt = (
+            "You are a careful senior Android engineer. Answer in Persian. "
+            "Analyze only the supplied source excerpts. Do not assume unseen code. "
+            "Do not modify files or claim tests were run. Identify each file's role, "
+            "confirmed bugs, risks, and dependencies. Be concise and cite file names.\\n"
+            f"USER REQUEST: {task}\\nSOURCE EXCERPTS:\\n{context}\\n"
+            "Return a compact factual batch summary."
+        )
+        summary = qwen(prompt, 260)
+        summaries.append("BATCH " + str(index) + ": " + ", ".join(batch) + "\\n" + summary)
+    if not summaries:
+        print("هیچ خلاصه‌ای از فایل‌ها دریافت نشد.")
+        return
+    print("\\nدر حال جمع‌بندی نتایج همه مراحل...", flush=True)
+    final_prompt = (
+        "You are Robat2, a careful senior Android engineer. Answer in Persian. "
+        "Synthesize these batch summaries into a project review. Separate confirmed "
+        "findings from possible risks; list architecture/components, dependencies, "
+        "missing evidence, and prioritized next steps. Do not claim tests ran. "
+        "The review covers the listed source/config files, not binary assets or excluded secrets.\\n"
+        + "\\n\\n".join(summaries)
+    )
+    qwen(final_prompt, 900)
+
 def generate_patch(task, paths, context):
     prompt = (
         "You are Robat2, a careful senior Android/Java engineer. Implement the user's request "
@@ -319,9 +364,12 @@ def main():
             print("فایل‌های مرتبط انتخاب‌شده (حداکثر ۴ فایل):", ", ".join(paths), flush=True)
             if mode == "ask":
                 print("حالت بررسی فقط‌خواندنی است؛ هیچ فایلی تغییر نمی‌کند.", flush=True)
-                report = explain(task, paths, context)
-                if not report.strip():
-                    print("Qwen پاسخ متنی برنگرداند؛ وضعیت سرور را بررسی کن.")
+                if is_project_review(task):
+                    review_project(task)
+                else:
+                    report = explain(task, paths, context)
+                    if not report.strip():
+                        print("Qwen پاسخ متنی برنگرداند؛ وضعیت سرور را بررسی کن.")
             else:
                 print("در حال آماده‌سازی تغییر پیشنهادی؛ هنوز هیچ فایلی تغییر نکرده است...", flush=True)
                 patch = generate_patch(task, paths, context)
