@@ -18,6 +18,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import org.json.JSONObject;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
 public class MainActivity extends Activity {
     private static final String PREFS = "robat2_settings";
@@ -34,7 +37,9 @@ public class MainActivity extends Activity {
     private static final int EXPORT_PROJECT_FILE = 4103;
     private EditText input;
     private TextView status, conversation, filesLabel;
-    private Button send, clear, pickFiles, saveAnswer, exportProject, stop, validateProject, restoreProject, model7bButton, model3bButton, analyzeProject, createProjectButton;
+    private Button send, clear, pickFiles, saveAnswer, exportProject, stop, validateProject, restoreProject, model7bButton, model3bButton, analyzeProject, createProjectButton, githubSubmitButton, openGitHubActionsButton;
+    private String lastGitHubRepo = "hjo16442/Wallet-Rescue-V2";
+    private String lastGitHubPr = "7";
     private boolean projectCreationMode = false;
     private Spinner modeSelector;
     private String selectedMode = "مهندس خودکار";
@@ -50,7 +55,10 @@ public class MainActivity extends Activity {
         super.onCreate(state);
         getWindow().setStatusBarColor(0xFF101827);
         getWindow().setNavigationBarColor(0xFF101827);
-        history.append(getSharedPreferences(PREFS, MODE_PRIVATE).getString(HISTORY_KEY, ""));
+        SharedPreferences savedSettings = getSharedPreferences(PREFS, MODE_PRIVATE);
+        history.append(savedSettings.getString(HISTORY_KEY, ""));
+        lastGitHubRepo = savedSettings.getString("github_repo", lastGitHubRepo);
+        lastGitHubPr = savedSettings.getString("github_pr", lastGitHubPr);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(14),dp(14),dp(14),dp(10));
@@ -127,6 +135,10 @@ public class MainActivity extends Activity {
         actions.setOrientation(LinearLayout.HORIZONTAL);
         createProjectButton = new Button(this); createProjectButton.setText("ساخت پروژه از توضیح");
         LinearLayout.LayoutParams createParams=params(); createParams.topMargin=dp(3); root.addView(createProjectButton,createParams);
+        githubSubmitButton = new Button(this); githubSubmitButton.setText("ارسال همین دستور به GitHub و ساخت APK");
+        LinearLayout.LayoutParams githubParams=params(); githubParams.topMargin=dp(3); root.addView(githubSubmitButton,githubParams);
+        openGitHubActionsButton = new Button(this); openGitHubActionsButton.setText("مشاهده اجرا و دانلود APK در GitHub");
+        LinearLayout.LayoutParams actionsLinkParams=params(); actionsLinkParams.topMargin=dp(2); root.addView(openGitHubActionsButton,actionsLinkParams);
         send = new Button(this); send.setText("ارسال"); send.setEnabled(false);
         stop = new Button(this); stop.setText("توقف"); stop.setEnabled(false);
         clear = new Button(this); clear.setText("گفتگوی جدید");
@@ -137,6 +149,8 @@ public class MainActivity extends Activity {
         setContentView(root);
         send.setOnClickListener(v -> submit());
         createProjectButton.setOnClickListener(v -> createProjectFromDescription());
+        githubSubmitButton.setOnClickListener(v -> sendToGitHub());
+        openGitHubActionsButton.setOnClickListener(v -> openGitHubActions());
         stop.setOnClickListener(v -> stopGeneration());
         clear.setOnClickListener(v -> clearConversation());
         pickFiles.setOnClickListener(v -> openProjectPicker());
@@ -587,6 +601,154 @@ public class MainActivity extends Activity {
                 saveAnswer.setEnabled(true); generating=false; stop.setEnabled(false);
                 send.setEnabled(modelReady); pickFiles.setEnabled(true);
             });
+        });
+    }
+
+
+    private void openGitHubActions() {
+        String repo = lastGitHubRepo;
+        if (repo == null || !repo.matches("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")) {
+            status.setText("نام مخزن GitHub معتبر نیست.");
+            return;
+        }
+        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/" + repo + "/actions")));
+    }
+
+    /** Send the current natural-language request to the repository's existing PR workflow. */
+    private void sendToGitHub() {
+        if (generating) {
+            status.setText("ابتدا تولید پاسخ محلی تمام شود یا آن را متوقف کن.");
+            return;
+        }
+        final String instruction = input.getText().toString().trim();
+        if (instruction.isEmpty()) {
+            status.setText("ابتدا دستور موردنظر را در کادر گفتگو بنویس.");
+            return;
+        }
+
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(18), dp(6), dp(18), dp(2));
+
+        EditText repoField = new EditText(this);
+        repoField.setSingleLine(true);
+        repoField.setHint("مخزن به شکل owner/repository");
+        repoField.setText(lastGitHubRepo);
+        form.addView(repoField, params());
+
+        EditText prField = new EditText(this);
+        prField.setSingleLine(true);
+        prField.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        prField.setHint("شماره Pull Request باز");
+        prField.setText(lastGitHubPr);
+        form.addView(prField, params());
+
+        EditText tokenField = new EditText(this);
+        tokenField.setSingleLine(true);
+        tokenField.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        tokenField.setHint("GitHub token (Issues: Read and write)");
+        form.addView(tokenField, params());
+
+        TextView note = new TextView(this);
+        note.setText("توکن فقط برای ارسال همین درخواست به api.github.com استفاده می‌شود و ذخیره نمی‌شود. دستور روی PR باز ثبت می‌شود؛ GitHub Actions آن را اجرا می‌کند و پس از ساخت موفق، APKها در بخش Artifacts قرار می‌گیرند. هیچ عبارت بازیابی، کلید خصوصی یا رمز کیف پولی در دستور ننویس.");
+        note.setTextSize(12);
+        note.setPadding(0, dp(8), 0, 0);
+        form.addView(note, params());
+
+        android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
+                .setTitle("اجرای دستور در GitHub")
+                .setView(form)
+                .setNegativeButton("انصراف", null)
+                .setPositiveButton("ارسال دستور", null)
+                .create();
+        dialog.setOnShowListener(v -> dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(button -> {
+            String repo = repoField.getText().toString().trim();
+            String pr = prField.getText().toString().trim();
+            String token = tokenField.getText().toString().trim();
+            if (!repo.matches("[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")) {
+                status.setText("نام مخزن باید به شکل owner/repository باشد.");
+                return;
+            }
+            if (!pr.matches("[0-9]+") || token.isEmpty()) {
+                status.setText("شماره PR و GitHub token را وارد کن.");
+                return;
+            }
+            int level = modeSelector == null ? 2 : modeSelector.getSelectedItemPosition() + 1;
+            tokenField.setText("");
+            dialog.dismiss();
+            postGitHubCommand(repo, pr, token, instruction, level);
+        }));
+        dialog.show();
+    }
+
+    private void postGitHubCommand(String repo, String pr, String token, String instruction, int level) {
+        githubSubmitButton.setEnabled(false);
+        status.setText("در حال ارسال دستور به GitHub...");
+        worker.execute(() -> {
+            HttpURLConnection connection = null;
+            try {
+                URL endpoint = new URL("https://api.github.com/repos/" + repo + "/issues/" + pr + "/comments");
+                connection = (HttpURLConnection) endpoint.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setConnectTimeout(20000);
+                connection.setReadTimeout(30000);
+                connection.setRequestProperty("Accept", "application/vnd.github+json");
+                connection.setRequestProperty("X-GitHub-Api-Version", "2022-11-28");
+                connection.setRequestProperty("Authorization", "Bearer " + token);
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                connection.setDoOutput(true);
+
+                JSONObject payload = new JSONObject();
+                payload.put("body", "/fix [LEVEL:" + level + "] " + instruction);
+                try (OutputStream out = connection.getOutputStream()) {
+                    out.write(payload.toString().getBytes(StandardCharsets.UTF_8));
+                }
+
+                int code = connection.getResponseCode();
+                InputStream responseStream = code >= 200 && code < 300
+                        ? connection.getInputStream() : connection.getErrorStream();
+                String responseText = "";
+                if (responseStream != null) {
+                    try (InputStream in = responseStream; ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
+                        byte[] buffer = new byte[4096];
+                        int count;
+                        while ((count = in.read(buffer)) != -1) bytes.write(buffer, 0, count);
+                        responseText = new String(bytes.toByteArray(), StandardCharsets.UTF_8);
+                    }
+                }
+
+                if (code == 201) {
+                    lastGitHubRepo = repo;
+                    lastGitHubPr = pr;
+                    getSharedPreferences(PREFS, MODE_PRIVATE).edit()
+                            .putString("github_repo", repo)
+                            .putString("github_pr", pr)
+                            .apply();
+                    final String message = "دستور به PR #" + pr + " ارسال شد. GitHub Actions آن را پردازش می‌کند؛ پس از پایان موفق، در دکمه «مشاهده اجرا و دانلود APK» فایل Robat2-APK و Wallet-Rescue-APK را از Artifacts دریافت کن.";
+                    runOnUiThread(() -> {
+                        status.setText(message);
+                        input.setText("");
+                        githubSubmitButton.setEnabled(true);
+                    });
+                } else {
+                    String detail = responseText;
+                    try { detail = new JSONObject(responseText).optString("message", responseText); }
+                    catch (Exception ignored) {}
+                    final String error = "ارسال به GitHub ناموفق بود (HTTP " + code + "): " + detail;
+                    runOnUiThread(() -> {
+                        status.setText(error);
+                        githubSubmitButton.setEnabled(true);
+                    });
+                }
+            } catch (Exception e) {
+                final String error = "خطا در ارتباط با GitHub: " + safeMessage(e);
+                runOnUiThread(() -> {
+                    status.setText(error);
+                    githubSubmitButton.setEnabled(true);
+                });
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
         });
     }
 
