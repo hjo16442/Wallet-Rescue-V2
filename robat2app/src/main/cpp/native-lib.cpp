@@ -30,7 +30,10 @@ Java_com_robat2_mobile_LocalModelEngine_loadModel(JNIEnv *env, jclass, jstring p
     llama_model_params params = llama_model_default_params();
     params.use_mmap = true;
     const std::string model_path = from_jstring(env, path);
-    g_context_size = model_path.find("7b") != std::string::npos || model_path.find("7B") != std::string::npos ? 2048 : 4096;
+    const bool is_7b = model_path.find("7b") != std::string::npos || model_path.find("7B") != std::string::npos;
+    const bool is_q4 = model_path.find("q4") != std::string::npos || model_path.find("Q4") != std::string::npos;
+    // Q4 imports need a smaller KV cache on 8 GB phones to reduce memory pressure.
+    g_context_size = (is_7b || is_q4) ? 2048 : 4096;
     g_model = llama_model_load_from_file(model_path.c_str(), params);
     return g_model ? JNI_TRUE : JNI_FALSE;
 }
