@@ -129,7 +129,7 @@ def make_context(paths, task):
             for i in sorted(chosen):
                 if i > last + 1:
                     excerpt.append("... [lines omitted] ...")
-                excerpt.append(f"{i+1}: {lines[i]}")
+                excerpt.append(lines[i])
                 last = i
             text = "\n".join(excerpt)
         block = f"\n\n===== FILE: {rel} =====\n{text}"[:remaining]
