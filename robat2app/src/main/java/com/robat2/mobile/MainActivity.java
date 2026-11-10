@@ -33,11 +33,12 @@ public class MainActivity extends Activity {
     private static final int MAX_HISTORY_CHARS = 3500;
     private static final int MAX_PROJECT_CHARS = 6000;
     private static final int PICK_PROJECT_FILES = 4101;
+    private static final int PICK_MODEL_FILE = 4104;
     private static final int SAVE_RESPONSE_FILE = 4102;
     private static final int EXPORT_PROJECT_FILE = 4103;
     private EditText input;
     private TextView status, conversation, filesLabel;
-    private Button send, clear, pickFiles, saveAnswer, exportProject, stop, validateProject, restoreProject, model7bButton, model3bButton, analyzeProject, createProjectButton, githubSubmitButton, openGitHubActionsButton;
+    private Button send, clear, pickFiles, saveAnswer, exportProject, stop, validateProject, restoreProject, model7bButton, model3bButton, importModelButton, analyzeProject, createProjectButton, githubSubmitButton, openGitHubActionsButton;
     private String lastGitHubRepo = "hjo16442/Wallet-Rescue-V2";
     private String lastGitHubPr = "7";
     private boolean projectCreationMode = false;
@@ -87,6 +88,8 @@ public class MainActivity extends Activity {
         modeSelector.setSelection(1);
         model3bButton = new Button(this); model3bButton.setText("دانلود / فعال‌سازی مدل اصلی ۳B (حدود ۱٫۷ گیگابایت)");
         LinearLayout.LayoutParams m3=params(); m3.topMargin=dp(3); root.addView(model3bButton,m3);
+        importModelButton = new Button(this); importModelButton.setText("انتخاب و بارگذاری فایل مدل GGUF از گوشی");
+        LinearLayout.LayoutParams im=params(); im.topMargin=dp(3); root.addView(importModelButton,im);
         model7bButton = new Button(this); model7bButton.setText("دانلود / فعال‌سازی مدل برنامه‌نویسی ۷B (۴٫۷ گیگابایت)");
         LinearLayout.LayoutParams m7=params(); m7.topMargin=dp(3); root.addView(model7bButton,m7);
         modeSelector.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
@@ -160,6 +163,7 @@ public class MainActivity extends Activity {
         analyzeProject.setOnClickListener(v -> runProjectAnalysis());
         restoreProject.setOnClickListener(v -> restoreProjectBackup());
         model3bButton.setOnClickListener(v -> downloadAndLoad3B());
+        importModelButton.setOnClickListener(v -> chooseExternalModel());
         model7bButton.setOnClickListener(v -> { if(modelFile!=null && modelFile.getName().toLowerCase(java.util.Locale.ROOT).contains("7b")) switchTo3BModel(); else confirm7BModel(); });
         prepareModel();
     }
@@ -296,21 +300,30 @@ public class MainActivity extends Activity {
     private void prepareModel() {
         worker.execute(() -> {
             try {
-                modelFile = new File(getFilesDir(), "robat2-model.gguf");
+                String importedPath=getSharedPreferences(PREFS,MODE_PRIVATE).getString("imported_model_path","");
+                boolean imported=importedPath!=null && !importedPath.isEmpty();
+                modelFile=imported ? new File(importedPath) : new File(getFilesDir(),"robat2-model.gguf");
                 if (!modelFile.isFile() || modelFile.length() < MIN_MODEL_BYTES ||
-                        !MODEL_3B_SHA256.equals(sha256File(modelFile))) {
-                    modelReady=false;
-                    runOnUiThread(() -> {
-                        status.setText("برای استفاده، مدل اصلی ۳B را یک‌بار دانلود کن. پس از دانلود، اجرای مدل آفلاین است.");
-                        send.setEnabled(false);
-                    });
-                    return;
+                        (!imported && !MODEL_3B_SHA256.equals(sha256File(modelFile))) || !hasGgufHeader(modelFile)) {
+                    if(imported) getSharedPreferences(PREFS,MODE_PRIVATE).edit().remove("imported_model_path").apply();
+                    modelFile = new File(getFilesDir(), "robat2-model.gguf");
+                    if (!modelFile.isFile() || modelFile.length() < MIN_MODEL_BYTES ||
+                            !MODEL_3B_SHA256.equals(sha256File(modelFile)) || !hasGgufHeader(modelFile)) {
+                        modelReady=false;
+                        runOnUiThread(() -> {
+                            status.setText("برای شروع، مدل ۳B را دانلود کن یا فایل GGUF موجود را از گوشی انتخاب کن.");
+                            send.setEnabled(false);
+                        });
+                        return;
+                    }
+                    imported=false;
                 }
-                runOnUiThread(() -> status.setText("مدل تأیید شد؛ در حال بارگذاری روی گوشی..."));
+                final boolean isImported=imported;
+                runOnUiThread(() -> status.setText(isImported ? "مدل واردشده تأیید شد؛ در حال بارگذاری..." : "مدل تأیید شد؛ در حال بارگذاری روی گوشی..."));
                 boolean ok=LocalModelEngine.loadModel(modelFile.getAbsolutePath());
                 modelReady=ok;
                 runOnUiThread(() -> {
-                    status.setText(ok ? "مدل اصلی ۳B آماده است؛ پردازش روی گوشی انجام می‌شود." : "بارگذاری مدل ناموفق؛ RAM گوشی را بررسی کن.");
+                    status.setText(ok ? (isImported ? "مدل GGUF واردشده آماده است؛ پردازش روی گوشی انجام می‌شود." : "مدل اصلی ۳B آماده است؛ پردازش روی گوشی انجام می‌شود.") : "بارگذاری مدل ناموفق؛ RAM گوشی را بررسی کن.");
                     send.setEnabled(ok);
                 });
             } catch(Throwable e) {
@@ -318,6 +331,13 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> status.setText("آماده‌سازی ناموفق: "+safeMessage(e)));
             }
         });
+    }
+
+    private boolean hasGgufHeader(File file) {
+        try(InputStream in=new FileInputStream(file)) {
+            byte[] magic=new byte[4];
+            return in.read(magic)==4 && magic[0]=='G' && magic[1]=='G' && magic[2]=='U' && magic[3]=='F';
+        } catch(IOException e) { return false; }
     }
 
     private void downloadAndLoad3B() {
@@ -397,6 +417,94 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void chooseExternalModel() {
+        if(generating) { status.setText("تا پایان پاسخ فعلی صبر کن."); return; }
+        Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivityForResult(intent,PICK_MODEL_FILE);
+    }
+
+    private void importAndLoadExternalModel(Uri uri) {
+        if(generating) { status.setText("تا پایان پاسخ فعلی صبر کن."); return; }
+        send.setEnabled(false);
+        importModelButton.setEnabled(false);
+        model3bButton.setEnabled(false);
+        model7bButton.setEnabled(false);
+        status.setText("در حال بررسی و واردکردن فایل مدل GGUF...");
+        worker.execute(() -> {
+            File temp=new File(getFilesDir(),"robat2-imported-model.gguf.part");
+            File target=null;
+            File previous=modelFile;
+            boolean loadAttempted=false;
+            try {
+                String sourceName=queryName(uri);
+                if(sourceName==null || !sourceName.toLowerCase(java.util.Locale.ROOT).endsWith(".gguf"))
+                    throw new IOException("فقط فایل مدل با پسوند GGUF قابل انتخاب است.");
+                long available=new android.os.StatFs(getFilesDir().getAbsolutePath()).getAvailableBytes();
+                if(available<2_500_000_000L)
+                    throw new IOException("برای کپی مدل و فضای موقت، حداقل ۲٫۵ گیگابایت فضای خالی لازم است.");
+                if(temp.exists() && !temp.delete()) throw new IOException("پاک‌کردن فایل موقت قبلی ناموفق بود.");
+                long total=0;
+                try(InputStream raw=getContentResolver().openInputStream(uri)) {
+                    if(raw==null) throw new IOException("خواندن فایل انتخاب‌شده ممکن نیست.");
+                    try(BufferedInputStream in=new BufferedInputStream(raw);
+                        BufferedOutputStream out=new BufferedOutputStream(new FileOutputStream(temp))) {
+                        byte[] header=new byte[4];
+                        int headerBytes=in.read(header);
+                        if(headerBytes!=4 || header[0]!='G' || header[1]!='G' || header[2]!='U' || header[3]!='F')
+                            throw new IOException("فایل انتخاب‌شده یک مدل GGUF معتبر نیست.");
+                        out.write(header); total=4;
+                        byte[] buffer=new byte[1024*1024]; int n;
+                        while((n=in.read(buffer))!=-1) {
+                            out.write(buffer,0,n); total+=n;
+                            if(total%(128L*1024L*1024L)<buffer.length) {
+                                final long copied=total;
+                                runOnUiThread(() -> status.setText("کپی مدل: "+(copied/1048576L)+" مگابایت..."));
+                            }
+                        }
+                        out.flush();
+                    }
+                }
+                if(total<MIN_MODEL_BYTES) throw new IOException("حجم فایل کمتر از حد انتظار برای مدل ۳B/۷B است؛ فایل کامل انتخاب نشده است.");
+                String lower=sourceName.toLowerCase(java.util.Locale.ROOT);
+                String modelTag=lower.contains("7b") ? "7b-q4" : "3b-q4";
+                target=new File(getFilesDir(),"robat2-imported-"+modelTag+"-"+System.currentTimeMillis()+".gguf");
+                if(!temp.renameTo(target)) throw new IOException("ذخیره مدل در حافظه امن برنامه ناموفق بود.");
+                runOnUiThread(() -> status.setText("فایل کپی شد؛ در حال بارگذاری مدل روی گوشی..."));
+                loadAttempted=true;
+                boolean ok=LocalModelEngine.loadModel(target.getAbsolutePath());
+                if(!ok) {
+                    if(previous!=null && previous.isFile() && LocalModelEngine.loadModel(previous.getAbsolutePath())) {
+                        modelFile=previous; modelReady=true;
+                    } else modelReady=false;
+                    throw new IOException("مدل در حافظه RAM بارگذاری نشد؛ مدل قبلی حذف نشده است.");
+                }
+                modelFile=target; modelReady=true;
+                getSharedPreferences(PREFS,MODE_PRIVATE).edit().putString("imported_model_path",target.getAbsolutePath()).apply();
+                final String label=sourceName;
+                runOnUiThread(() -> {
+                    status.setText("مدل واردشده و فعال شد: "+label+". اجرای پاسخ‌ها روی همین گوشی انجام می‌شود.");
+                    send.setEnabled(true); importModelButton.setEnabled(true);
+                    model3bButton.setEnabled(true); model7bButton.setEnabled(true);
+                });
+            } catch(Throwable e) {
+                temp.delete();
+                if(loadAttempted && !modelReady && previous!=null && previous.isFile()) {
+                    try { if(LocalModelEngine.loadModel(previous.getAbsolutePath())) { modelFile=previous; modelReady=true; } }
+                    catch(Throwable ignored) { modelReady=false; }
+                }
+                final String message=safeMessage(e);
+                runOnUiThread(() -> {
+                    status.setText("واردکردن/بارگذاری مدل ناموفق: "+message);
+                    send.setEnabled(modelReady); importModelButton.setEnabled(true);
+                    model3bButton.setEnabled(true); model7bButton.setEnabled(true);
+                });
+            }
+        });
+    }
+
     private void openProjectPicker() {
         if(generating) { status.setText("تا پایان پاسخ فعلی صبر کن."); return; }
         Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -411,6 +519,9 @@ public class MainActivity extends Activity {
         if(resultCode!=RESULT_OK || data==null) return;
         if(requestCode==PICK_PROJECT_FILES) {
             worker.execute(() -> importSelectedFiles(data));
+        } else if(requestCode==PICK_MODEL_FILE) {
+            Uri modelUri=data.getData();
+            if(modelUri!=null) importAndLoadExternalModel(modelUri);
         } else if(requestCode==EXPORT_PROJECT_FILE) {
             Uri uri=data.getData();
             if(uri!=null) writeProjectZip(uri);
