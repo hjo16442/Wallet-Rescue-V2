@@ -220,23 +220,23 @@ def review_project(task):
             "You are a careful senior Android engineer. Answer in Persian. "
             "Analyze only the supplied source excerpts. Do not assume unseen code. "
             "Do not modify files or claim tests were run. Identify each file's role, "
-            "confirmed bugs, risks, and dependencies. Be concise and cite file names.\\n"
-            f"USER REQUEST: {task}\\nSOURCE EXCERPTS:\\n{context}\\n"
+            "confirmed bugs, risks, and dependencies. Be concise and cite file names.\n"
+            f"USER REQUEST: {task}\nSOURCE EXCERPTS:\n{context}\n"
             "Return a compact factual batch summary."
         )
         summary = qwen(prompt, 260)
-        summaries.append("BATCH " + str(index) + ": " + ", ".join(batch) + "\\n" + summary)
+        summaries.append("BATCH " + str(index) + ": " + ", ".join(batch) + "\n" + summary)
     if not summaries:
         print("هیچ خلاصه‌ای از فایل‌ها دریافت نشد.")
         return
-    print("\\nدر حال جمع‌بندی نتایج همه مراحل...", flush=True)
+    print("\nدر حال جمع‌بندی نتایج همه مراحل...", flush=True)
     final_prompt = (
         "You are Robat2, a careful senior Android engineer. Answer in Persian. "
         "Synthesize these batch summaries into a project review. Separate confirmed "
         "findings from possible risks; list architecture/components, dependencies, "
         "missing evidence, and prioritized next steps. Do not claim tests ran. "
-        "The review covers the listed source/config files, not binary assets or excluded secrets.\\n"
-        + "\\n\\n".join(summaries)
+        "The review covers the listed source/config files, not binary assets or excluded secrets.\n"
+        + "\n\n".join(summaries)
     )
     qwen(final_prompt, 900)
 
