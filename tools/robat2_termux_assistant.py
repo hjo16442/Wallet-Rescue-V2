@@ -38,14 +38,47 @@ def qwen_online():
 
 def qwen(prompt, max_tokens=1000):
     body = json.dumps({"messages": [{"role": "user", "content": prompt}],
-                       "temperature": 0.1, "max_tokens": max_tokens}).encode("utf-8")
+                       "temperature": 0.1, "max_tokens": max_tokens,
+                       "stream": True}).encode("utf-8")
     req = urllib.request.Request(API, data=body, headers={"Content-Type": "application/json"})
+    print("درخواست به Qwen ارسال شد؛ پاسخ به‌صورت زنده نمایش داده می‌شود...", flush=True)
+    parts, raw_lines = [], []
     try:
         with urllib.request.urlopen(req, timeout=300) as r:
-            data = json.loads(r.read().decode("utf-8"))
-        return data["choices"][0]["message"]["content"]
+            for raw in r:
+                line = raw.decode("utf-8", "replace").strip()
+                if not line:
+                    continue
+                raw_lines.append(line)
+                if not line.startswith("data:"):
+                    continue
+                payload = line[5:].strip()
+                if payload == "[DONE]":
+                    break
+                try:
+                    event = json.loads(payload)
+                except json.JSONDecodeError:
+                    continue
+                choices = event.get("choices") or []
+                if not choices:
+                    continue
+                piece = (choices[0].get("delta") or {}).get("content")
+                if piece:
+                    print(piece, end="", flush=True)
+                    parts.append(piece)
+        if parts:
+            print("", flush=True)
+            return "".join(parts)
+        data = json.loads("\n".join(raw_lines))
+        content = data["choices"][0]["message"]["content"]
+        print(content, flush=True)
+        return content
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"Qwen HTTP {e.code}: {e.read().decode('utf-8', 'replace')}")
+    except (TimeoutError, urllib.error.URLError) as e:
+        raise RuntimeError(f"ارتباط با Qwen قطع شد یا بیش از ۵ دقیقه پاسخ نداد: {e}")
+    except (KeyError, IndexError, json.JSONDecodeError) as e:
+        raise RuntimeError(f"پاسخ Qwen قابل‌خواندن نبود: {e}")
 
 def safe_path(rel):
     p = Path(rel)
@@ -97,6 +130,12 @@ def choose_files(task):
             score += 1
         if low.endswith("mainactivity.java"):
             score += 2
+        # Inspect bounded file content too; path-only matching missed relevant code.
+        try:
+            sample = (ROOT / path).read_text(encoding="utf-8", errors="replace")[:120000].lower()
+            score += min(12, sum(2 for term in terms if term.lower() in sample))
+        except Exception:
+            pass
         ranked.append((score, path))
     ranked.sort(key=lambda x: (-x[0], x[1]))
     selected = [p for score, p in ranked if score > 0][:4]
@@ -277,10 +316,14 @@ def main():
             if not context:
                 print("فایل مرتبط قابل‌خواندن پیدا نشد.")
                 continue
-            print("فایل‌های انتخاب‌شده:", ", ".join(paths))
+            print("فایل‌های مرتبط انتخاب‌شده (حداکثر ۴ فایل):", ", ".join(paths), flush=True)
             if mode == "ask":
-                print("\n" + explain(task, paths, context))
+                print("حالت بررسی فقط‌خواندنی است؛ هیچ فایلی تغییر نمی‌کند.", flush=True)
+                report = explain(task, paths, context)
+                if not report.strip():
+                    print("Qwen پاسخ متنی برنگرداند؛ وضعیت سرور را بررسی کن.")
             else:
+                print("در حال آماده‌سازی تغییر پیشنهادی؛ هنوز هیچ فایلی تغییر نکرده است...", flush=True)
                 patch = generate_patch(task, paths, context)
                 if apply_patch(patch):
                     commit_push()
