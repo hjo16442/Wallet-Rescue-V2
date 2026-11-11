@@ -2,7 +2,10 @@ package com.walletrescue;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.bitcoinj.core.Address;
 import org.bitcoinj.core.Base58;
+import org.bitcoinj.params.MainNetParams;
+import org.bouncycastle.crypto.digests.KeccakDigest;
 import org.bouncycastle.util.encoders.Hex;
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -54,7 +57,7 @@ public final class AddressScanner {
         for (String raw : addresses) {
             String addr = raw == null ? "" : raw.trim();
             if (addr.isEmpty()) continue;
-            if (!validAddress(addr, network)) out.append("آدرس ").append(chain).append(" نامعتبر:\n").append(addr).append("\n------------------\n");
+            if (!validAddress(addr, network)) out.append("آدرس ").append(chain).append(" نامعتبر (قالب یا checksum):\n").append(addr).append("\n------------------\n");
             else valid.add(addr);
         }
         if (valid.isEmpty()) return out.append("\nهیچ آدرس معتبر ").append(chain).append(" وجود ندارد.").toString();
@@ -88,10 +91,45 @@ public final class AddressScanner {
     }
 
     static boolean validAddress(String a, int network) {
-        if (network == BTC) return BTC_LEGACY.matcher(a).matches() || BTC_SEGWIT.matcher(a).matches();
-        if (network == ETH) return ETH_ADDRESS.matcher(a).matches();
+        if (a == null || a.isEmpty()) return false;
+        if (network == BTC) return validBitcoinAddress(a);
+        if (network == ETH) return validEthereumAddress(a);
         if (network == TRON) return validTronAddress(a);
         return false;
+    }
+
+    private static boolean validBitcoinAddress(String address) {
+        if (!BTC_LEGACY.matcher(address).matches() && !BTC_SEGWIT.matcher(address).matches()) return false;
+        try {
+            // bitcoinj validates Base58Check and Bech32 checksums for Bitcoin mainnet.
+            Address.fromString(MainNetParams.get(), address);
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private static boolean validEthereumAddress(String address) {
+        if (!ETH_ADDRESS.matcher(address).matches()) return false;
+        String body = address.substring(2);
+        String lower = body.toLowerCase(java.util.Locale.ROOT);
+        String upper = body.toUpperCase(java.util.Locale.ROOT);
+        // EIP-55 checksum is optional for uniformly lower- or upper-case addresses.
+        if (body.equals(lower) || body.equals(upper)) return true;
+
+        byte[] hash = new byte[32];
+        byte[] input = lower.getBytes(StandardCharsets.US_ASCII);
+        KeccakDigest digest = new KeccakDigest(256);
+        digest.update(input, 0, input.length);
+        digest.doFinal(hash, 0);
+        for (int i = 0; i < body.length(); i++) {
+            char ch = body.charAt(i);
+            if (!Character.isLetter(ch)) continue;
+            int nibble = (i & 1) == 0 ? ((hash[i / 2] >>> 4) & 0x0f) : (hash[i / 2] & 0x0f);
+            boolean expectedUpper = nibble >= 8;
+            if (Character.isUpperCase(ch) != expectedUpper) return false;
+        }
+        return true;
     }
 
     private static boolean validTronAddress(String address) {
@@ -102,7 +140,7 @@ public final class AddressScanner {
             byte[] payload = Arrays.copyOfRange(decoded, 0, 21);
             byte[] first = MessageDigest.getInstance("SHA-256").digest(payload);
             byte[] second = MessageDigest.getInstance("SHA-256").digest(first);
-            return Arrays.equals(Arrays.copyOfRange(decoded, 21, 25), Arrays.copyOfRange(second, 0, 4));
+            return Arrays.equals(Arrays.copyOfRange(decoded, 21, 25), Arrays.copyOf(second, 4));
         } catch (Exception ignored) {
             return false;
         }
@@ -118,7 +156,9 @@ public final class AddressScanner {
             long confirmed = chain.getLong("funded_txo_sum") - chain.getLong("spent_txo_sum");
             long pending = mp.getLong("funded_txo_sum") - mp.getLong("spent_txo_sum");
             BigDecimal c = sats(confirmed), p = sats(pending);
-            return "Bitcoin: " + address + "\nموجودی تأییدشده: " + c.toPlainString() + " BTC\nدر انتظار تأیید: " + p.toPlainString() + " BTC\nمجموع: " + c.add(p).toPlainString() + " BTC\nتعداد تراکنش‌های تأییدشده: " + chain.optLong("tx_count", 0) + "\nAPI: " + ep;
+            long confirmedTx = chain.getLong("tx_count");
+            long pendingTx = mp.getLong("tx_count");
+            return "Bitcoin: " + address + "\nموجودی تأییدشده: " + c.toPlainString() + " BTC\nدر انتظار تأیید: " + p.toPlainString() + " BTC\nمجموع: " + c.add(p).toPlainString() + " BTC\nتراکنش‌های تأییدشده: " + confirmedTx + "\nتراکنش‌های در انتظار: " + pendingTx + "\nمجموع تراکنش‌های گزارش‌شده: " + (confirmedTx + pendingTx) + "\nAPI: " + ep;
         } catch (Exception e) { last = e; }
         throw new Exception("APIهای BTC پاسخ ندادند: " + (last == null ? "" : last.getMessage()));
     }
@@ -129,22 +169,34 @@ public final class AddressScanner {
         JSONObject balanceResponse = postJson(ETH_RPC, balanceRequest);
         JSONObject txResponse = postJson(ETH_RPC, txRequest);
         if (balanceResponse.has("error") || !balanceResponse.has("result")) throw new Exception("خطای RPC در دریافت موجودی ETH");
-        if (txResponse.has("error") || !txResponse.has("result")) throw new Exception("خطای RPC در دریافت تعداد تراکنش‌ها");
-        BigInteger wei = new BigInteger(balanceResponse.getString("result").substring(2), 16);
+        if (txResponse.has("error") || !txResponse.has("result")) throw new Exception("خطای RPC در دریافت nonce اتریوم");
+        BigInteger wei = parseRpcQuantity(balanceResponse.getString("result"), "موجودی ETH");
         BigDecimal eth = new BigDecimal(wei).divide(new BigDecimal("1000000000000000000"), 18, RoundingMode.DOWN);
-        BigInteger nonce = new BigInteger(txResponse.getString("result").substring(2), 16);
-        return "Ethereum: " + address + "\nموجودی ETH: " + eth.stripTrailingZeros().toPlainString() + " ETH\nتعداد تراکنش‌های ارسال‌شده (nonce): " + nonce + "\nمنبع: Ethereum PublicNode RPC";
+        BigInteger nonce = parseRpcQuantity(txResponse.getString("result"), "nonce اتریوم");
+        return "Ethereum: " + address + "\nموجودی ETH: " + eth.stripTrailingZeros().toPlainString() + " ETH\nnonce: " + nonce + " (تعداد تراکنش‌های ارسال‌شده؛ تاریخچه کامل تراکنش‌ها نیست)\nمنبع: Ethereum PublicNode RPC";
+    }
+
+    private static BigInteger parseRpcQuantity(String value, String field) throws Exception {
+        if (value == null || !value.matches("^0x[0-9a-fA-F]+$")) throw new Exception("پاسخ نامعتبر RPC برای " + field);
+        return new BigInteger(value.substring(2), 16);
     }
 
     private static String checkTron(String address) throws Exception {
         JSONObject accountRequest = new JSONObject().put("address", address).put("visible", true);
         JSONObject account = postJson(TRON_API + "/wallet/getaccount", accountRequest);
         if (account.has("Error")) throw new Exception("TRON API: " + account.optString("Error"));
-        long sun = account.optLong("balance", 0L);
+        boolean accountActivated = account.length() > 0;
+        long sun;
+        if (!accountActivated) {
+            // TronGrid may return an empty object for an address that has never been activated.
+            sun = 0L;
+        } else {
+            if (!account.has("balance")) throw new Exception("پاسخ حساب TRON ناقص است؛ فیلد balance وجود ندارد.");
+            sun = account.getLong("balance");
+        }
         BigDecimal trx = BigDecimal.valueOf(sun).divide(new BigDecimal("1000000"), 6, RoundingMode.DOWN);
 
         byte[] decoded = Base58.decode(address);
-        if (!validTronAddress(address)) throw new Exception("آدرس TRON یا checksum آن معتبر نیست");
         String ownerHex = Hex.toHexString(decoded, 1, 20);
         String parameter = "000000000000000000000000" + ownerHex;
         JSONObject tokenRequest = new JSONObject()
@@ -154,20 +206,20 @@ public final class AddressScanner {
                 .put("parameter", parameter)
                 .put("visible", true);
         JSONObject tokenResponse = postJson(TRON_API + "/wallet/triggerconstantcontract", tokenRequest);
-        JSONArray values = tokenResponse.optJSONArray("constant_result");
-        String usdtText = "نامشخص (پاسخ قرارداد ناقص)";
-        if (values != null && values.length() > 0) {
-            String hex = values.getString(0);
-            BigInteger raw = hex.isEmpty() ? BigInteger.ZERO : new BigInteger(hex, 16);
-            BigDecimal usdt = new BigDecimal(raw).divide(new BigDecimal("1000000"), 6, RoundingMode.DOWN);
-            usdtText = usdt.stripTrailingZeros().toPlainString() + " USDT";
-        } else {
-            JSONObject contractResult = tokenResponse.optJSONObject("result");
-            if (contractResult == null || !contractResult.optBoolean("result", false)) {
-                usdtText = "نامشخص (قرارداد پاسخ معتبر نداد)";
-            }
+        JSONObject contractStatus = tokenResponse.optJSONObject("result");
+        if (contractStatus == null || !contractStatus.has("result")) throw new Exception("پاسخ قرارداد USDT ناقص است.");
+        if (!contractStatus.getBoolean("result")) {
+            String reason = contractStatus.optString("message", "قرارداد پاسخ موفق نداد");
+            throw new Exception("خطای قرارداد USDT: " + reason);
         }
-        return "TRON: " + address + "\nموجودی TRX: " + trx.stripTrailingZeros().toPlainString() + " TRX\nموجودی USDT-TRC20: " + usdtText + "\nمنبع: TronGrid public API";
+        JSONArray values = tokenResponse.optJSONArray("constant_result");
+        if (values == null || values.length() == 0) throw new Exception("پاسخ موجودی USDT فاقد constant_result است.");
+        String hex = values.getString(0);
+        if (hex == null || !hex.matches("^[0-9a-fA-F]+$")) throw new Exception("مقدار موجودی USDT در پاسخ قرارداد نامعتبر است.");
+        BigInteger raw = new BigInteger(hex, 16);
+        BigDecimal usdt = new BigDecimal(raw).divide(new BigDecimal("1000000"), 6, RoundingMode.DOWN);
+        String accountState = accountActivated ? "فعال" : "فعال‌نشده (پاسخ حساب خالی؛ موجودی TRX صفر گزارش شد)";
+        return "TRON: " + address + "\nوضعیت حساب: " + accountState + "\nموجودی TRX: " + trx.stripTrailingZeros().toPlainString() + " TRX\nموجودی USDT-TRC20: " + usdt.stripTrailingZeros().toPlainString() + " USDT\nمنبع: TronGrid public API";
     }
 
     private static BigDecimal sats(long n) {
