@@ -7,9 +7,11 @@ on:
       - main
       - feature/robat2-android-app
       - feature/robat2-full-audit-v2
+      - feature/robat2-offline-ai
   pull_request:
     branches:
       - main
+      - feature/robat2-full-audit-v2
 
 permissions:
   contents: write
@@ -25,10 +27,18 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Setup Android SDK and NDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android native build tools
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
+      - name: Build Robat2 APK without bundling the language model
+        run: gradle :robat2app:assembleDebug --no-daemon
       - name: Compile Robat2 AI engine
         run: mvn -B -q package
       - name: Run Gradle unit tests
@@ -41,6 +51,11 @@ jobs:
           test -s robat2app/build/outputs/apk/debug/robat2app-debug.apk
           file app/build/outputs/apk/debug/app-debug.apk
           file robat2app/build/outputs/apk/debug/robat2app-debug.apk
+          test "$(stat -c%s robat2app/build/outputs/apk/debug/robat2app-debug.apk)" -lt 100000000
+          if unzip -l robat2app/build/outputs/apk/debug/robat2app-debug.apk | grep -qi '\.gguf'; then
+            echo "Unexpected GGUF model found inside APK"
+            exit 1
+          fi
       - name: Upload Robat2 APK
         uses: actions/upload-artifact@v4
         with:
@@ -54,7 +69,7 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
       - name: Publish APK downloads
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/robat2-full-audit-v2'
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/robat2-full-audit-v2' || github.ref == 'refs/heads/feature/robat2-offline-ai'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-build-${{ github.run_number }}

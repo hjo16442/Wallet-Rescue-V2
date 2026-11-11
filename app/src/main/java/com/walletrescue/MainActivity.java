@@ -8,8 +8,6 @@ import android.content.Context;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ScrollView;
-import android.widget.Spinner;
-import android.widget.ArrayAdapter;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
@@ -19,8 +17,7 @@ import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity{
  private EditText inputText;
- private Spinner networkSpinner;
- private TextView outputText,statusText,speedText,walletText,progressText;
+ private TextView outputText,statusText,speedText,walletText;
  private Button startBtn,stopBtn,create12Btn,create24Btn,copyBtn,newWalletBtn;
  private ScrollView outputScroll;
  private volatile boolean scanCancelled=false,scanning=false, walletCreated=false;
@@ -31,10 +28,6 @@ public class MainActivity extends AppCompatActivity{
   super.onCreate(b);
   setContentView(R.layout.activity_main);
   inputText=findViewById(R.id.inputText);
-  networkSpinner=findViewById(R.id.networkSpinner);
-  ArrayAdapter<String> networks=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,new String[]{"Bitcoin (BTC)","Ethereum (ETH)","TRON + USDT (TRC20)"});
-  networks.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-  networkSpinner.setAdapter(networks);
   outputText=findViewById(R.id.outputText);
   statusText=findViewById(R.id.statusText);
   speedText=findViewById(R.id.speedText);
@@ -50,7 +43,7 @@ public class MainActivity extends AppCompatActivity{
   newWalletBtn=new Button(this);
   newWalletBtn.setText("ساخت کیف پول جدید");
   newWalletBtn.setEnabled(false);
-  ((android.widget.LinearLayout) findViewById(R.id.outputScroll).getParent()).addView(newWalletBtn, 3);
+  ((android.widget.LinearLayout) outputScroll.getParent()).addView(newWalletBtn, 5);
 
   stopBtn.setEnabled(false);
   copyBtn.setEnabled(false);
@@ -76,7 +69,6 @@ public class MainActivity extends AppCompatActivity{
   walletText.setText("");
   copyBtn.setEnabled(false);
   newWalletBtn.setEnabled(false);
-  progressText = findViewById(R.id.statusText);
   new Thread(()->{
    try{
     WalletCore.WalletResult w=WalletCore.create(count);
@@ -86,9 +78,7 @@ public class MainActivity extends AppCompatActivity{
     report.append("کیف پول جدید ساخته شد — ").append(count).append(" کلمه\n\n");
     report.append("عبارت بازیابی (آن را با هیچ‌کس به اشتراک نگذارید):\n").append(w.mnemonic()).append("\n\n");
     report.append("Bitcoin BTC\nآدرس: ").append(w.btc).append("\nمسیر: ").append(w.btcPath).append("\n\n");
-    report.append("Ethereum ETH\nآدرس: ").append(w.eth).append("\nمسیر: ").append(w.ethPath).append("\n\n");
-    report.append("TRON / TRC20\nآدرس: ").append(w.tron).append("\nمسیر: ").append(w.tronPath).append("\n\n");
-    report.append("موجودی‌ها هنوز بررسی نشده‌اند. شبکه را در بخش پایین انتخاب و آدرس عمومی را وارد کنید.\n\n");
+    report.append("برای بررسی موجودی بیت‌کوین، آدرس عمومی BTC را در کادر پایین وارد کنید.\n\n");
     report.append("هشدار: عبارت بازیابی و کلید خصوصی فقط روی دستگاه نگهداری می‌شوند و به اینترنت ارسال نمی‌شوند.");
     runOnUiThread(()->{
      walletText.setText(report.toString());
@@ -131,11 +121,7 @@ public class MainActivity extends AppCompatActivity{
    if(!s.trim().isEmpty()) list.add(s.trim());
   if(list.isEmpty()){
    // اگر آدرس وارد نشده، از آدرس کیف پول ساخته شده استفاده شود
-   if(currentWallet!=null){
-    int selected=networkSpinner.getSelectedItemPosition();
-    String ownAddress=selected==0?currentWallet.btc:selected==1?currentWallet.eth:currentWallet.tron;
-    if(ownAddress!=null && !ownAddress.isEmpty()) list.add(ownAddress);
-   }
+   if(currentWallet!=null && currentWallet.btc!=null && !currentWallet.btc.isEmpty()) list.add(currentWallet.btc);
    if(list.isEmpty()){
     statusText.setText("برای بررسی، آدرس عمومی شبکه انتخاب‌شده را وارد کنید یا ابتدا کیف پول بسازید.");
     return;
@@ -149,15 +135,15 @@ public class MainActivity extends AppCompatActivity{
   scanning=true;
   startBtn.setEnabled(false);
   stopBtn.setEnabled(true);
-  int selectedNetwork=networkSpinner.getSelectedItemPosition();
-  String selectedName=selectedNetwork==0?"BTC":selectedNetwork==1?"ETH":"TRON / USDT-TRC20";
+  int selectedNetwork=AddressScanner.BTC;
+  String selectedName="BTC";
   outputText.setText("بررسی آدرس‌های عمومی "+selectedName+" آغاز شد…");
   statusText.setText("در حال بررسی "+selectedName+"…");
   speedText.setText("۰ از "+fmt(list.size()));
   t0=SystemClock.elapsedRealtime();
   new Thread(()->{
    try{
-    String report=AddressScanner.scan(this,list,selectedNetwork,(done,total)->runOnUiThread(()->{
+    String report=AddressScanner.scan(this,list,AddressScanner.BTC,(done,total)->runOnUiThread(()->{
      if(!scanCancelled){
       long ms=Math.max(1,SystemClock.elapsedRealtime()-t0);
       statusText.setText(selectedName+" — "+done+" از "+total);
