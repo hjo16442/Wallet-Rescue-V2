@@ -64,15 +64,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p dist
-          git archive --format=zip --output=dist/Full-Project-Source.zip HEAD
-          git ls-files -z -- '*.java' '*.kt' '*.xml' '*.gradle' '*.properties' '*.cpp' '*.h' '*.c' '*.cmake' '*.py' '*.md' '*.yml' '*.yaml' '*.json' \
-            | xargs -0 -r zip -q dist/Source-Files.zip
-          test -s dist/Full-Project-Source.zip
-          test -s dist/Source-Files.zip
+          mkdir -p dist/source-files dist/full-project
+          git archive HEAD | tar -x -C dist/full-project
+          while IFS= read -r -d '' file; do
+            mkdir -p "dist/source-files/$(dirname "$file")"
+            cp -- "$file" "dist/source-files/$file"
+          done < <(git ls-files -z -- '*.java' '*.kt' '*.xml' '*.gradle' '*.properties' '*.cpp' '*.h' '*.c' '*.cmake' '*.py' '*.md' '*.yml' '*.yaml' '*.json')
+          (cd dist/source-files && zip -q -r ../Source-Files.zip .)
+          (cd dist/full-project && zip -q -r ../Full-Project-Source.zip .)
           cp app/build/outputs/apk/debug/app-debug.apk dist/Wallet-Rescue.apk
           cp robat2app/build/outputs/apk/debug/robat2app-debug.apk dist/Robat2.apk
-          sha256sum dist/* > dist/SHA256SUMS.txt
+          sha256sum dist/*.apk dist/*.zip > dist/SHA256SUMS.txt
       - name: Upload Wallet Rescue APK
         uses: actions/upload-artifact@v4
         with:
@@ -92,7 +94,7 @@ jobs:
         with:
           name: Source-Files-ZIP
           path: |
-            dist/Source-Files.zip
+            dist/source-files/
             dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
@@ -101,7 +103,7 @@ jobs:
         with:
           name: Full-Project-ZIP
           path: |
-            dist/Full-Project-Source.zip
+            dist/full-project/
             dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
@@ -110,7 +112,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-build-${{ github.run_number }}
-          name: Android downloads #${{ github.run_number }}
+          name: "Android downloads #${{ github.run_number }}"
           prerelease: true
           make_latest: false
           files: |
