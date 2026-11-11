@@ -53,8 +53,8 @@ public class WalletCoreTest {
     @Test
     public void validatesEthereumEip55MixedCaseChecksum() {
         assertTrue(AddressScanner.validAddress("0x0000000000000000000000000000000000000000", AddressScanner.ETH));
-        assertTrue(AddressScanner.validAddress("0x5Aeda56215b167893e80B4fE645BA6d5Bab767DE", AddressScanner.ETH));
-        assertFalse(AddressScanner.validAddress("0x5AEDA56215b167893e80B4FE645BA6d5Bab767DE", AddressScanner.ETH));
+        assertTrue(AddressScanner.validAddress("0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", AddressScanner.ETH));
+        assertFalse(AddressScanner.validAddress("0x5AAeb6053F3E94C9b9A09f33669435E7Ef1BeAed", AddressScanner.ETH));
         assertFalse(AddressScanner.validAddress("0x1234", AddressScanner.ETH));
     }
 
