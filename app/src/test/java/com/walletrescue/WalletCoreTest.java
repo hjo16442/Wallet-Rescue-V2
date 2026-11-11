@@ -15,6 +15,8 @@ public class WalletCoreTest {
         assertTrue(wallet.btc.matches("^1[1-9A-HJ-NP-Za-km-z]{25,34}$"));
         assertTrue(wallet.eth.matches("^0x[0-9a-fA-F]{40}$"));
         assertTrue(wallet.tron.matches("^T[1-9A-HJ-NP-Za-km-z]{33}$"));
+        assertTrue(AddressScanner.validAddress(wallet.btc, AddressScanner.BTC));
+        assertTrue(AddressScanner.validAddress(wallet.eth, AddressScanner.ETH));
         assertTrue(AddressScanner.validAddress(wallet.tron, AddressScanner.TRON));
     }
 
@@ -27,6 +29,9 @@ public class WalletCoreTest {
         assertTrue(wallet.btc.matches("^1[1-9A-HJ-NP-Za-km-z]{25,34}$"));
         assertTrue(wallet.eth.matches("^0x[0-9a-fA-F]{40}$"));
         assertTrue(wallet.tron.matches("^T[1-9A-HJ-NP-Za-km-z]{33}$"));
+        assertTrue(AddressScanner.validAddress(wallet.btc, AddressScanner.BTC));
+        assertTrue(AddressScanner.validAddress(wallet.eth, AddressScanner.ETH));
+        assertTrue(AddressScanner.validAddress(wallet.tron, AddressScanner.TRON));
     }
 
     @Test
@@ -39,12 +44,36 @@ public class WalletCoreTest {
     }
 
     @Test
-    public void validatesPublicAddressesForEachNetwork() {
-        assertTrue(AddressScanner.validAddress("0x0000000000000000000000000000000000000000", AddressScanner.ETH));
-        assertFalse(AddressScanner.validAddress("0x1234", AddressScanner.ETH));
-        assertFalse(AddressScanner.validAddress("not-a-tron-address", AddressScanner.TRON));
+    public void validatesBitcoinChecksumNotJustAddressShape() {
         assertTrue(AddressScanner.validAddress("1BoatSLRHtKNngkdXEeobR76b53LETtpyT", AddressScanner.BTC));
-        assertFalse(AddressScanner.validAddress("invalid-btc", AddressScanner.BTC));
+        assertFalse(AddressScanner.validAddress("1BoatSLRHtKNngkdXEeobR76b53LETtpyU", AddressScanner.BTC));
+        assertFalse(AddressScanner.validAddress("not-a-bitcoin-address", AddressScanner.BTC));
+    }
+
+    @Test
+    public void validatesEthereumEip55MixedCaseChecksum() {
+        assertTrue(AddressScanner.validAddress("0x0000000000000000000000000000000000000000", AddressScanner.ETH));
+        assertTrue(AddressScanner.validAddress("0x5Aeda56215b167893e80B4fE645BA6d5Bab767DE", AddressScanner.ETH));
+        assertFalse(AddressScanner.validAddress("0x5AEDA56215b167893e80B4FE645BA6d5Bab767DE", AddressScanner.ETH));
+        assertFalse(AddressScanner.validAddress("0x1234", AddressScanner.ETH));
+    }
+
+    @Test
+    public void validatesTronChecksum() throws Exception {
+        WalletCore.WalletResult wallet = WalletCore.create(12);
+        assertTrue(AddressScanner.validAddress(wallet.tron, AddressScanner.TRON));
+        char last = wallet.tron.charAt(wallet.tron.length() - 1);
+        char replacement = last == '1' ? '2' : '1';
+        String changed = wallet.tron.substring(0, wallet.tron.length() - 1) + replacement;
+        assertFalse(AddressScanner.validAddress(changed, AddressScanner.TRON));
+        assertFalse(AddressScanner.validAddress("not-a-tron-address", AddressScanner.TRON));
+    }
+
+    @Test
+    public void rejectsNullAndUnknownNetworkAddresses() {
+        assertFalse(AddressScanner.validAddress(null, AddressScanner.BTC));
+        assertFalse(AddressScanner.validAddress("", AddressScanner.ETH));
+        assertFalse(AddressScanner.validAddress("1BoatSLRHtKNngkdXEeobR76b53LETtpyT", 99));
     }
 
     @Test
