@@ -250,11 +250,43 @@ def generate_patch(task, paths, context):
         "full replacement file. Modify only listed files and only where supplied source gives "
         "enough context. If insufficient, return NEED_MORE_CONTEXT and a short Persian reason. "
         "Preserve existing features. Never edit workflows, secrets, signing files, wallet data, "
-        "mnemonic values, private keys or credentials. Do not invent test results.\n"
+        "mnemonic values, private keys or credentials. Do not invent test results. "
+        "Every file must have diff --git, ---, and +++ headers. Hunk bodies must contain only "
+        "context lines beginning with space, removed lines beginning with -, or added lines "
+        "beginning with +. Do not invent line numbers or placeholder blob hashes.\n"
         f"REQUEST:\n{task}\nFILES:\n{', '.join(paths)}\nSOURCE EXCERPTS:\n{context}\n"
         "Produce a minimal unified diff now."
     )
-    return strip_fence(qwen(prompt, 1200))
+    patch = strip_fence(qwen(prompt, 1800))
+    if "NEED_MORE_CONTEXT" in patch:
+        return patch
+    patch_file = Path.home() / "robat2-qwen.patch"
+    last_error = ""
+    for attempt in range(2):
+        patch_file.write_text(patch, encoding="utf-8")
+        checked = subprocess.run(
+            ["git", "apply", "--recount", "--check", str(patch_file)],
+            cwd=str(ROOT), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        if checked.returncode == 0:
+            return patch
+        last_error = (checked.stderr or checked.stdout or "ساختار diff نامعتبر است").strip()
+        if attempt == 1:
+            raise RuntimeError("Qwen پس از دو تلاش diff معتبر نساخت: " + last_error)
+        repair_prompt = (
+            "Your previous unified diff was rejected by git apply. Repair its syntax only. "
+            "Return ONLY a complete valid unified git diff, no markdown fences or prose. "
+            "Keep the intended changes, use exact paths from the allowed list, and do not "
+            "invent source code or placeholder hashes. If you cannot repair it, return "
+            "NEED_MORE_CONTEXT and a short Persian reason.\n"
+            f"GIT ERROR:\n{last_error}\n"
+            f"ALLOWED FILES: {', '.join(paths)}\n"
+            f"PREVIOUS DIFF:\n{patch}"
+        )
+        patch = strip_fence(qwen(repair_prompt, 1800))
+        if "NEED_MORE_CONTEXT" in patch:
+            return patch
+    return patch
 
 def apply_patch(patch):
     if len(patch) > MAX_PATCH:
@@ -273,13 +305,13 @@ def apply_patch(patch):
                 raise RuntimeError("پچ شامل مسیر غیرمجاز است.")
     patch_file = Path.home() / "robat2-qwen.patch"
     patch_file.write_text(patch, encoding="utf-8")
-    run(["git", "apply", "--check", str(patch_file)])
+    run(["git", "apply", "--recount", "--check", str(patch_file)])
     print("\nپیش‌نمایش:")
     print(run(["git", "apply", "--stat", str(patch_file)]))
     if input("این تغییرات اعمال شوند؟ (بله/خیر): ").strip().lower() not in {"بله", "ب", "yes", "y"}:
         print("لغو شد؛ فایل‌ها تغییر نکردند.")
         return False
-    run(["git", "apply", str(patch_file)])
+    run(["git", "apply", "--recount", str(patch_file)])
     run(["git", "diff", "--check"])
     print(run(["git", "diff", "--stat"]))
     return True
