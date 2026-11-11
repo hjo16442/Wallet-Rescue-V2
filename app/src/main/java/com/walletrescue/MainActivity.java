@@ -20,7 +20,7 @@ import java.util.Locale;
 public class MainActivity extends AppCompatActivity{
  private EditText inputText;
  private Spinner networkSpinner;
- private TextView outputText,statusText,speedText,walletText,progressText;
+ private TextView outputText,statusText,speedText,walletText;
  private Button startBtn,stopBtn,create12Btn,create24Btn,copyBtn,newWalletBtn;
  private ScrollView outputScroll;
  private volatile boolean scanCancelled=false,scanning=false, walletCreated=false;
@@ -50,7 +50,7 @@ public class MainActivity extends AppCompatActivity{
   newWalletBtn=new Button(this);
   newWalletBtn.setText("ساخت کیف پول جدید");
   newWalletBtn.setEnabled(false);
-  ((android.widget.LinearLayout) findViewById(R.id.outputScroll).getParent()).addView(newWalletBtn, 3);
+  ((android.widget.LinearLayout) outputScroll.getParent()).addView(newWalletBtn, 5);
 
   stopBtn.setEnabled(false);
   copyBtn.setEnabled(false);
@@ -76,7 +76,6 @@ public class MainActivity extends AppCompatActivity{
   walletText.setText("");
   copyBtn.setEnabled(false);
   newWalletBtn.setEnabled(false);
-  progressText = findViewById(R.id.statusText);
   new Thread(()->{
    try{
     WalletCore.WalletResult w=WalletCore.create(count);
