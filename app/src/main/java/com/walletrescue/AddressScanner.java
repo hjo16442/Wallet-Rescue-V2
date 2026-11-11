@@ -10,6 +10,7 @@ import org.bouncycastle.util.encoders.Hex;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -227,6 +228,20 @@ public final class AddressScanner {
     }
 
     private static JSONObject getJson(String url) throws Exception {
+        Exception last = null;
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                return getJsonOnce(url);
+            } catch (Exception e) {
+                last = e;
+                if (!isRetryable(e) || attempt == 3) break;
+                pauseBeforeRetry(attempt);
+            }
+        }
+        throw last == null ? new Exception("خطای نامشخص شبکه") : last;
+    }
+
+    private static JSONObject getJsonOnce(String url) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         try {
             c.setConnectTimeout(10000); c.setReadTimeout(10000);
@@ -242,6 +257,20 @@ public final class AddressScanner {
     }
 
     private static JSONObject postJson(String url, JSONObject payload) throws Exception {
+        Exception last = null;
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                return postJsonOnce(url, payload);
+            } catch (Exception e) {
+                last = e;
+                if (!isRetryable(e) || attempt == 3) break;
+                pauseBeforeRetry(attempt);
+            }
+        }
+        throw last == null ? new Exception("خطای نامشخص شبکه") : last;
+    }
+
+    private static JSONObject postJsonOnce(String url, JSONObject payload) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         try {
             c.setRequestMethod("POST"); c.setDoOutput(true);
@@ -260,6 +289,21 @@ public final class AddressScanner {
             if (response.has("Error")) throw new Exception(response.optString("Error"));
             return response;
         } finally { c.disconnect(); }
+    }
+
+    private static boolean isRetryable(Exception e) {
+        if (e instanceof IOException) return true;
+        String message = e.getMessage() == null ? "" : e.getMessage();
+        return message.startsWith("HTTP 429") || message.matches("^HTTP 5[0-9]{2}.*");
+    }
+
+    private static void pauseBeforeRetry(int attempt) throws Exception {
+        try {
+            Thread.sleep(400L * attempt);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new Exception("درخواست شبکه متوقف شد.", e);
+        }
     }
 
     private static String read(InputStream s) throws Exception {
