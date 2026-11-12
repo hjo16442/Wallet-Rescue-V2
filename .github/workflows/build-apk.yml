@@ -1,11 +1,10 @@
-name: Build Android APKs
+name: Build Wallet Rescue APK
 
 on:
   workflow_dispatch:
   push:
     branches:
       - main
-      - feature/robat2-android-app
       - fix/stabilize-android-apk-build
   pull_request:
     branches:
@@ -15,12 +14,12 @@ permissions:
   contents: write
 
 concurrency:
-  group: android-apk-${{ github.ref }}
+  group: wallet-rescue-apk-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build and verify both Android apps
+    name: Build and verify Wallet Rescue
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -35,24 +34,15 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
-      - name: Build Wallet Rescue and Robat2
-        run: gradle --no-daemon --stacktrace :app:assembleDebug :robat2app:assembleDebug
-      - name: Verify APK outputs
+      - name: Build Wallet Rescue
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Verify APK output
         shell: bash
         run: |
           set -euo pipefail
           test -s app/build/outputs/apk/debug/app-debug.apk
-          test -s robat2app/build/outputs/apk/debug/robat2app-debug.apk
           file app/build/outputs/apk/debug/app-debug.apk
-          file robat2app/build/outputs/apk/debug/robat2app-debug.apk
-          sha256sum app/build/outputs/apk/debug/app-debug.apk robat2app/build/outputs/apk/debug/robat2app-debug.apk
-      - name: Upload Robat2 APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Robat2-APK
-          path: robat2app/build/outputs/apk/debug/robat2app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
+          sha256sum app/build/outputs/apk/debug/app-debug.apk
       - name: Upload Wallet Rescue APK
         uses: actions/upload-artifact@v4
         with:
@@ -60,16 +50,14 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
-      - name: Publish APK downloads
+      - name: Publish APK download
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: apk-build-${{ github.run_number }}
-          name: Android APKs #${{ github.run_number }}
+          tag_name: wallet-rescue-apk-${{ github.run_number }}
+          name: Wallet Rescue APK #${{ github.run_number }}
           prerelease: true
           make_latest: false
-          files: |
-            robat2app/build/outputs/apk/debug/robat2app-debug.apk
-            app/build/outputs/apk/debug/app-debug.apk
+          files: app/build/outputs/apk/debug/app-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
