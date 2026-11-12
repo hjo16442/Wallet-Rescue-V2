@@ -4,7 +4,6 @@ import android.os.Bundle;
 import android.os.SystemClock;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import java.util.ArrayList;
@@ -34,25 +33,45 @@ public class MainActivity extends AppCompatActivity {
         stopBtn.setEnabled(false);
         startBtn.setOnClickListener(v -> startScan());
         stopBtn.setOnClickListener(v -> stopScan());
-        generate12Btn.setOnClickListener(v -> generatePhrase(12));
-        generate24Btn.setOnClickListener(v -> generatePhrase(24));
+        generate12Btn.setOnClickListener(v -> generateWallet(12));
+        generate24Btn.setOnClickListener(v -> generateWallet(24));
     }
 
-    private void generatePhrase(int words) {
+    /** Creates one fresh BIP39 phrase and derives its first mainnet BTC receive address. */
+    private void generateWallet(int words) {
         if (scanning) {
             statusText.setText("ابتدا بررسی بیت‌کوین را متوقف کنید.");
             return;
         }
-        try {
-            String phrase = Bip39Generator.generate(this, words);
-            outputText.setText("عبارت بازیابی BIP39 (" + words + " کلمه)\n\n" + phrase
-                    + "\n\nاین عبارت فقط روی همین گوشی تولید شده است. آن را با هیچ‌کس به اشتراک نگذارید.");
-            statusText.setText("عبارت " + words + " کلمه‌ای با موفقیت تولید شد.");
-            speedText.setText("تولید آفلاین و امن روی گوشی؛ اتصال اینترنت برای تولید لازم نیست.");
-        } catch (Exception e) {
-            statusText.setText("خطا در تولید عبارت بازیابی");
-            outputText.setText(e.getMessage() == null ? e.toString() : e.getMessage());
-        }
+        generate12Btn.setEnabled(false);
+        generate24Btn.setEnabled(false);
+        statusText.setText("در حال تولید عبارت و مشتق‌سازی آدرس BTC...");
+        speedText.setText("همه مراحل به‌صورت محلی روی گوشی انجام می‌شوند.");
+        new Thread(() -> {
+            try {
+                String phrase = Bip39Generator.generate(this, words);
+                String address = Bip39AddressDeriver.firstMainnetReceiveAddress(phrase);
+                runOnUiThread(() -> {
+                    outputText.setText("عبارت بازیابی BIP39 (" + words + " کلمه)\n\n"
+                            + phrase + "\n\n"
+                            + "اولین آدرس دریافت بیت‌کوین (Mainnet)\n"
+                            + address + "\n\n"
+                            + "این آدرس از همین عبارت و مسیر استاندارد m/44'/0'/0'/0/0 ساخته شده است.\n"
+                            + "عبارت بازیابی را با هیچ‌کس به اشتراک نگذارید و در اینترنت ارسال نکنید.");
+                    statusText.setText("تولید عبارت و آدرس بیت‌کوین با موفقیت انجام شد.");
+                    speedText.setText("تولید و مشتق‌سازی آفلاین؛ برای بررسی موجودی آدرس، اینترنت لازم است.");
+                    generate12Btn.setEnabled(true);
+                    generate24Btn.setEnabled(true);
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    statusText.setText("خطا در تولید عبارت یا آدرس");
+                    outputText.setText(e.getMessage() == null ? e.toString() : e.getMessage());
+                    generate12Btn.setEnabled(true);
+                    generate24Btn.setEnabled(true);
+                });
+            }
+        }).start();
     }
 
     private void startScan() {

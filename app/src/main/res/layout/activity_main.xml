@@ -8,7 +8,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Wallet Rescue — تولید عبارت بازیابی و بررسی BTC"
+        android:text="Wallet Rescue — تولید خودکار عبارت و آدرس BTC"
         android:textSize="19sp"
         android:textStyle="bold" />
 
@@ -16,7 +16,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:text="تولید عبارت بازیابی استاندارد BIP39 با تصادفی‌سازی امن روی گوشی:" />
+        android:text="با انتخاب یکی از دکمه‌ها، عبارت BIP39 و اولین آدرس دریافت بیت‌کوین متناظر با همان عبارت به‌طور خودکار ساخته می‌شود." />
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -29,7 +29,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="تولید ۱۲ کلمه" />
+            android:text="۱۲ کلمه + آدرس BTC" />
 
         <Button
             android:id="@+id/generate24Btn"
@@ -37,13 +37,13 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="8dp"
-            android:text="تولید ۲۴ کلمه" />
+            android:text="۲۴ کلمه + آدرس BTC" />
     </LinearLayout>
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="عبارت بازیابی را در اختیار هیچ‌کس قرار ندهید و در فضای آنلاین ارسال نکنید."
+        android:text="امنیت: عبارت و آدرس روی گوشی تولید می‌شوند؛ عبارت بازیابی را در اینترنت یا برای دیگران ارسال نکنید."
         android:textSize="12sp"
         android:textColor="#B00020" />
 
