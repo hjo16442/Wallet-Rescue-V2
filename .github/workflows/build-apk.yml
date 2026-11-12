@@ -8,10 +8,12 @@ on:
       - feature/robat2-android-app
       - feature/robat2-full-audit-v2
       - feature/robat2-offline-ai
+      - feature/robat2-downloadable-deliverables
   pull_request:
     branches:
       - main
       - feature/robat2-full-audit-v2
+      - feature/robat2-offline-ai
 
 permissions:
   contents: write
@@ -22,6 +24,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -56,30 +60,68 @@ jobs:
             echo "Unexpected GGUF model found inside APK"
             exit 1
           fi
-      - name: Upload Robat2 APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Robat2-APK
-          path: robat2app/build/outputs/apk/debug/robat2app-debug.apk
-          if-no-files-found: error
+      - name: Package downloadable source files and full project
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist/source-files dist/full-project
+          git archive HEAD | tar -x -C dist/full-project
+          while IFS= read -r -d '' file; do
+            mkdir -p "dist/source-files/$(dirname "$file")"
+            cp -- "$file" "dist/source-files/$file"
+          done < <(git ls-files -z -- '*.java' '*.kt' '*.xml' '*.gradle' '*.properties' '*.cpp' '*.h' '*.c' '*.cmake' '*.py' '*.md' '*.yml' '*.yaml' '*.json')
+          (cd dist/source-files && zip -q -r ../Source-Files.zip .)
+          (cd dist/full-project && zip -q -r ../Full-Project-Source.zip .)
+          cp app/build/outputs/apk/debug/app-debug.apk dist/Wallet-Rescue.apk
+          cp robat2app/build/outputs/apk/debug/robat2app-debug.apk dist/Robat2.apk
+          sha256sum dist/*.apk dist/*.zip > dist/SHA256SUMS.txt
       - name: Upload Wallet Rescue APK
         uses: actions/upload-artifact@v4
         with:
           name: Wallet-Rescue-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: dist/Wallet-Rescue.apk
           if-no-files-found: error
-      - name: Publish APK downloads
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/robat2-full-audit-v2' || github.ref == 'refs/heads/feature/robat2-offline-ai'
+          retention-days: 30
+      - name: Upload Robat2 APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Robat2-APK
+          path: dist/Robat2.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload source files ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Source-Files-ZIP
+          path: |
+            dist/source-files/
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload full project ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Full-Project-ZIP
+          path: |
+            dist/full-project/
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish all downloads
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/robat2-full-audit-v2' || github.ref == 'refs/heads/feature/robat2-offline-ai' || github.ref == 'refs/heads/feature/robat2-downloadable-deliverables'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-build-${{ github.run_number }}
-          name: Android APKs #${{ github.run_number }}
+          name: "Android downloads #${{ github.run_number }}"
           prerelease: true
           make_latest: false
           files: |
-            robat2app/build/outputs/apk/debug/robat2app-debug.apk
-            app/build/outputs/apk/debug/app-debug.apk
+            dist/Robat2.apk
+            dist/Wallet-Rescue.apk
+            dist/Source-Files.zip
+            dist/Full-Project-Source.zip
+            dist/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-# Robat2 APK build verification trigger
+# Robat2 APK build verification and downloadable deliverables
