@@ -15,6 +15,9 @@ android {
         versionName '4.0-BIP39'
     }
 }
+configurations.configureEach {
+    exclude group: 'org.bouncycastle', module: 'bcprov-jdk15to18'
+}
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.1'
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
