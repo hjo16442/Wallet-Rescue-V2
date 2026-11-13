@@ -39,6 +39,14 @@
                 android:layout_height="wrap_content"
                 android:text="۲۴ کلمه" />
         </RadioGroup>
+        <EditText
+            android:id="@+id/countInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:hint="تعداد عبارت‌ها (۱ تا ۱۰)"
+            android:inputType="number"
+            android:text="1" />
         <Button
             android:id="@+id/startBtn"
             android:layout_width="match_parent"
