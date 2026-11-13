@@ -1,22 +1,95 @@
+package com.example.auto_mnemonic;
 
-package com.walletrescue;
-import android.os.Bundle;import android.os.SystemClock;import android.widget.Button;import android.widget.EditText;import android.widget.ScrollView;import android.widget.TextView;import androidx.appcompat.app.AppCompatActivity;import java.util.ArrayList;import java.util.List;import java.util.Locale;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.View;
+import android.widget.Button;
+import android.widget.TextView;
+import android.widget.Toast;
+import androidx.appcompat.app.AppCompatActivity;
+import org.bitcoinj.core.MnemonicCode;
+import org.bitcoinj.crypto.MnemonicException;
+import java.security.SecureRandom;
+import java.util.List;
 
-public class MainActivity extends AppCompatActivity{
- private EditText inputText;private TextView outputText,statusText,speedText;private Button startBtn,stopBtn;private ScrollView outputScroll;private volatile boolean scanCancelled=false,scanning=false;private long t0;
+public class MainActivity extends AppCompatActivity {
 
- @Override protected void onCreate(Bundle b){super.onCreate(b);setContentView(R.layout.activity_main);inputText=findViewById(R.id.inputText);outputText=findViewById(R.id.outputText);statusText=findViewById(R.id.statusText);speedText=findViewById(R.id.speedText);startBtn=findViewById(R.id.startBtn);stopBtn=findViewById(R.id.stopBtn);outputScroll=findViewById(R.id.outputScroll);stopBtn.setEnabled(false);startBtn.setOnClickListener(v->startScan());stopBtn.setOnClickListener(v->stopScan());}
+    private TextView tvResult;
+    private Button btnStart, btnStop;
+    private Handler handler = new Handler(Looper.getMainLooper());
+    private boolean isRunning = false;
+    private int wordCount = 12; // پیش‌فرض ۱۲ کلمه
 
- private void startScan(){if(scanning)return;List<String> list=new ArrayList<>();for(String s:inputText.getText().toString().split("[\\r\\n,;\\s]+"))if(!s.trim().isEmpty())list.add(s.trim());if(list.isEmpty()){statusText.setText("ابتدا آدرس عمومی بیت‌کوین را وارد کنید.");return;}if(list.size()>100){statusText.setText("حداکثر ۱۰۰ آدرس مجاز است.");return;}
- scanCancelled=false;scanning=true;startBtn.setEnabled(false);stopBtn.setEnabled(true);outputText.setText("بررسی آدرس‌های عمومی BTC آغاز شد...");statusText.setText("در حال بررسی بیت‌کوین...");speedText.setText("۰ از "+fmt(list.size()));t0=SystemClock.elapsedRealtime();
- new Thread(()->{try{String report=AddressScanner.scan(this,list,0,(done,total)->runOnUiThread(()->{if(!scanCancelled){long ms=Math.max(1,SystemClock.elapsedRealtime()-t0);statusText.setText("BTC — "+done+" از "+total);speedText.setText(fmt(done)+" / "+fmt(total)+" آدرس | "+fmt(done*1000L/ms)+" آدرس/ثانیه");}}),()->scanCancelled);runOnUiThread(()->{outputText.setText(report);statusText.setText(scanCancelled?"بررسی متوقف شد.":"بررسی بیت‌کوین تمام شد.");speedText.setText(" ");finishScan();});}catch(Exception e){runOnUiThread(()->{statusText.setText(scanCancelled?"بررسی متوقف شد.":"خطا در بررسی BTC");outputText.append("\n"+(e.getMessage()==null?e.toString():e.getMessage()));speedText.setText(" ");finishScan();});}}).start();}
+    // Runnable برای اجرای مداوم
+    private final Runnable generateRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (isRunning) {
+                generateAndDisplay();
+                // تکرار هر ۵۰۰ میلی‌ثانیه (نیم ثانیه)
+                handler.postDelayed(this, 500); 
+            }
+        }
+    };
 
- private void stopScan(){scanCancelled=true;statusText.setText("درخواست توقف بررسی ارسال شد...");}
- private void finishScan(){scanning=false;startBtn.setEnabled(true);stopBtn.setEnabled(false);}
- private static String fmt(long n){return String.format(Locale.US,"%,d",n);}
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
 
- private String getWalletAddress(String walletId) {
-     // دریافت و برگرداندن شناسه کیف پول
-     return walletId;
- }
+        tvResult = findViewById(R.id.tvResult);
+        btnStart = findViewById(R.id.btnStart);
+        btnStop = findViewById(R.id.btnStop);
+
+        btnStart.setOnClickListener(v -> startAutoGeneration());
+        btnStop.setOnClickListener(v -> stopAutoGeneration());
+    }
+
+    private void startAutoGeneration() {
+        if (!isRunning) {
+            isRunning = true;
+            btnStart.setEnabled(false);
+            btnStop.setEnabled(true);
+            handler.post(generateRunnable);
+        }
+    }
+
+    private void stopAutoGeneration() {
+        isRunning = false;
+        btnStart.setEnabled(true);
+        btnStop.setEnabled(false);
+        handler.removeCallbacks(generateRunnable);
+    }
+
+    private void generateAndDisplay() {
+        try {
+            // انتخاب تصادفی بین ۱۲ و ۲۴ کلمه یا ثابت نگه داشتن آن
+            int entropyBits = (wordCount == 12) ? 128 : 256;
+            
+            byte[] entropy = new byte[entropyBits / 8];
+            SecureRandom secureRandom = new SecureRandom();
+            secureRandom.nextBytes(entropy);
+
+            List<String> mnemonic = MnemonicCode.INSTANCE.toMnemonic(entropy);
+            
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < mnemonic.size(); i++) {
+                sb.append(mnemonic.get(i));
+                if (i < mnemonic.size() - 1) sb.append(" ");
+            }
+            
+            // نمایش در UI
+            tvResult.setText(sb.toString());
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        stopAutoGeneration(); // توقف هنگام بسته شدن برنامه
+    }
 }
