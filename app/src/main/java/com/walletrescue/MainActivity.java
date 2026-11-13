@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -29,6 +30,7 @@ public class MainActivity extends AppCompatActivity {
     private final SecureRandom secureRandom = new SecureRandom();
     private final List<String> generated = new ArrayList<>();
     private TextView outputText, statusText, counterText;
+    private EditText countInput;
     private Button startBtn, stopBtn, saveBtn;
     private RadioGroup lengthGroup;
     private boolean running = false;
@@ -70,6 +72,7 @@ public class MainActivity extends AppCompatActivity {
         startBtn = findViewById(R.id.startBtn);
         stopBtn = findViewById(R.id.stopBtn);
         saveBtn = findViewById(R.id.saveBtn);
+        countInput = findViewById(R.id.countInput);
         lengthGroup = findViewById(R.id.lengthGroup);
 
         startBtn.setOnClickListener(v -> startGeneration());
@@ -82,7 +85,15 @@ public class MainActivity extends AppCompatActivity {
         if (running) return;
         int checked = lengthGroup.getCheckedRadioButtonId();
         wordCount = checked == R.id.radio24 ? 24 : 12;
-        targetCount = 1;
+        try {
+            targetCount = Integer.parseInt(countInput.getText().toString().trim());
+        } catch (NumberFormatException e) {
+            targetCount = 1;
+        }
+        if (targetCount < 1 || targetCount > MAX_PHRASES_PER_RUN) {
+            Toast.makeText(this, "تعداد باید بین ۱ تا ۱۰ باشد", Toast.LENGTH_LONG).show();
+            return;
+        }
         completed = 0;
         generated.clear();
         outputText.setText("");
