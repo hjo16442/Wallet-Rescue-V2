@@ -1,4 +1,4 @@
-package com.example.auto_mnemonic;
+package com.walletrescue;
 
 import android.os.Bundle;
 import android.os.Handler;
