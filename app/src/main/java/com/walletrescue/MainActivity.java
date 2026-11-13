@@ -8,3 +8,10 @@ public class MainActivity extends AppCompatActivity{
  new Thread(()->{try{String report=AddressScanner.scan(this,list,0,(done,total)->runOnUiThread(()->{if(!scanCancelled){long ms=Math.max(1,SystemClock.elapsedRealtime()-t0);statusText.setText("BTC — "+done+" از "+total);speedText.setText(fmt(done)+" / "+fmt(total)+" آدرس | "+fmt(done*1000L/ms)+" آدرس/ثانیه");}}),()->scanCancelled);runOnUiThread(()->{outputText.setText(report);statusText.setText(scanCancelled?"بررسی متوقف شد.":"بررسی بیت‌کوین تمام شد.");speedText.setText(" ");finishScan();});}catch(Exception e){runOnUiThread(()->{statusText.setText(scanCancelled?"بررسی متوقف شد.":"خطا در بررسی BTC");outputText.append("\n"+(e.getMessage()==null?e.toString():e.getMessage()));speedText.setText(" ");finishScan();});}}).start();}
  private void stopScan(){scanCancelled=true;statusText.setText("درخواست توقف بررسی ارسال شد...");}private void finishScan(){scanning=false;startBtn.setEnabled(true);stopBtn.setEnabled(false);}private static String fmt(long n){return String.format(Locale.US,"%,d",n);}
 }
+function getWalletAddress(walletId) {
+    // این تابع با ایدی پول دیگران یک آدرس پولی برگرداند.
+    // در اینجا از API پول دیگران استفاده شده است.
+    // برای ارائه مثالی، این کد به زبان اسکریپت جاوا است.
+    // API پول دیگران یک آدرس پولی برگرداند.
+    return walletId;
+}
