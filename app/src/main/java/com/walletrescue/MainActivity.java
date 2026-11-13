@@ -1,22 +1,144 @@
-
 package com.walletrescue;
-import android.os.Bundle;import android.os.SystemClock;import android.widget.Button;import android.widget.EditText;import android.widget.ScrollView;import android.widget.TextView;import androidx.appcompat.app.AppCompatActivity;import java.util.ArrayList;import java.util.List;import java.util.Locale;
 
-public class MainActivity extends AppCompatActivity{
- private EditText inputText;private TextView outputText,statusText,speedText;private Button startBtn,stopBtn;private ScrollView outputScroll;private volatile boolean scanCancelled=false,scanning=false;private long t0;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.widget.Button;
+import android.widget.RadioGroup;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
 
- @Override protected void onCreate(Bundle b){super.onCreate(b);setContentView(R.layout.activity_main);inputText=findViewById(R.id.inputText);outputText=findViewById(R.id.outputText);statusText=findViewById(R.id.statusText);speedText=findViewById(R.id.speedText);startBtn=findViewById(R.id.startBtn);stopBtn=findViewById(R.id.stopBtn);outputScroll=findViewById(R.id.outputScroll);stopBtn.setEnabled(false);startBtn.setOnClickListener(v->startScan());stopBtn.setOnClickListener(v->stopScan());}
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
 
- private void startScan(){if(scanning)return;List<String> list=new ArrayList<>();for(String s:inputText.getText().toString().split("[\\r\\n,;\\s]+"))if(!s.trim().isEmpty())list.add(s.trim());if(list.isEmpty()){statusText.setText("ابتدا آدرس عمومی بیت‌کوین را وارد کنید.");return;}if(list.size()>100){statusText.setText("حداکثر ۱۰۰ آدرس مجاز است.");return;}
- scanCancelled=false;scanning=true;startBtn.setEnabled(false);stopBtn.setEnabled(true);outputText.setText("بررسی آدرس‌های عمومی BTC آغاز شد...");statusText.setText("در حال بررسی بیت‌کوین...");speedText.setText("۰ از "+fmt(list.size()));t0=SystemClock.elapsedRealtime();
- new Thread(()->{try{String report=AddressScanner.scan(this,list,0,(done,total)->runOnUiThread(()->{if(!scanCancelled){long ms=Math.max(1,SystemClock.elapsedRealtime()-t0);statusText.setText("BTC — "+done+" از "+total);speedText.setText(fmt(done)+" / "+fmt(total)+" آدرس | "+fmt(done*1000L/ms)+" آدرس/ثانیه");}}),()->scanCancelled);runOnUiThread(()->{outputText.setText(report);statusText.setText(scanCancelled?"بررسی متوقف شد.":"بررسی بیت‌کوین تمام شد.");speedText.setText(" ");finishScan();});}catch(Exception e){runOnUiThread(()->{statusText.setText(scanCancelled?"بررسی متوقف شد.":"خطا در بررسی BTC");outputText.append("\n"+(e.getMessage()==null?e.toString():e.getMessage()));speedText.setText(" ");finishScan();});}}).start();}
+import org.bitcoinj.crypto.MnemonicCode;
 
- private void stopScan(){scanCancelled=true;statusText.setText("درخواست توقف بررسی ارسال شد...");}
- private void finishScan(){scanning=false;startBtn.setEnabled(true);stopBtn.setEnabled(false);}
- private static String fmt(long n){return String.format(Locale.US,"%,d",n);}
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.util.ArrayList;
+import java.util.List;
 
- private String getWalletAddress(String walletId) {
-     // دریافت و برگرداندن شناسه کیف پول
-     return walletId;
- }
+public class MainActivity extends AppCompatActivity {
+    private static final int CREATE_FILE = 41;
+    private static final int MAX_PHRASES_PER_RUN = 10;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final SecureRandom secureRandom = new SecureRandom();
+    private final List<String> generated = new ArrayList<>();
+    private TextView outputText, statusText, counterText;
+    private Button startBtn, stopBtn, saveBtn;
+    private RadioGroup lengthGroup;
+    private boolean running = false;
+    private int targetCount = 1;
+    private int completed = 0;
+    private int wordCount = 12;
+
+    private final Runnable generatorTask = new Runnable() {
+        @Override public void run() {
+            if (!running) return;
+            try {
+                byte[] entropy = new byte[wordCount == 12 ? 16 : 32];
+                secureRandom.nextBytes(entropy);
+                String phrase = String.join(" ", MnemonicCode.INSTANCE.toMnemonic(entropy));
+                generated.add(phrase);
+                completed++;
+                outputText.setText("عبارت شماره " + completed + " از " + targetCount + "\n\n" + phrase);
+                counterText.setText("تعداد تولیدشده: " + completed + " / " + targetCount);
+                statusText.setText("تولید موفق — عبارت فقط روی همین گوشی ساخته شد");
+                ((ScrollView)findViewById(R.id.outputScroll)).post(() ->
+                        ((ScrollView)findViewById(R.id.outputScroll)).fullScroll(ScrollView.FOCUS_DOWN));
+                if (completed >= targetCount) {
+                    stopGeneration("پایان تولید");
+                } else {
+                    handler.postDelayed(this, 1200);
+                }
+            } catch (Exception e) {
+                stopGeneration("خطا در تولید: " + e.getMessage());
+            }
+        }
+    };
+
+    @Override protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        outputText = findViewById(R.id.outputText);
+        statusText = findViewById(R.id.statusText);
+        counterText = findViewById(R.id.counterText);
+        startBtn = findViewById(R.id.startBtn);
+        stopBtn = findViewById(R.id.stopBtn);
+        saveBtn = findViewById(R.id.saveBtn);
+        lengthGroup = findViewById(R.id.lengthGroup);
+
+        startBtn.setOnClickListener(v -> startGeneration());
+        stopBtn.setOnClickListener(v -> stopGeneration("تولید متوقف شد"));
+        saveBtn.setOnClickListener(v -> saveToTxt());
+        updateButtons();
+    }
+
+    private void startGeneration() {
+        if (running) return;
+        int checked = lengthGroup.getCheckedRadioButtonId();
+        wordCount = checked == R.id.radio24 ? 24 : 12;
+        targetCount = 1;
+        completed = 0;
+        generated.clear();
+        outputText.setText("");
+        counterText.setText("تعداد تولیدشده: 0 / 1");
+        running = true;
+        statusText.setText("در حال تولید عبارت استاندارد BIP39...");
+        updateButtons();
+        handler.post(generatorTask);
+    }
+
+    private void stopGeneration(String message) {
+        running = false;
+        handler.removeCallbacks(generatorTask);
+        statusText.setText(message);
+        updateButtons();
+    }
+
+    private void updateButtons() {
+        startBtn.setEnabled(!running);
+        stopBtn.setEnabled(running);
+        saveBtn.setEnabled(!generated.isEmpty() && !running);
+    }
+
+    private void saveToTxt() {
+        if (generated.isEmpty()) {
+            Toast.makeText(this, "ابتدا یک عبارت تولید کنید", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TITLE, "wallet-rescue-bip39.txt");
+        startActivityForResult(intent, CREATE_FILE);
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == CREATE_FILE && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            Uri uri = data.getData();
+            try (OutputStream stream = getContentResolver().openOutputStream(uri)) {
+                if (stream == null) throw new IllegalStateException("امکان نوشتن فایل وجود ندارد");
+                StringBuilder text = new StringBuilder();
+                for (int i = 0; i < generated.size(); i++) {
+                    text.append("عبارت ").append(i + 1).append(":\n")
+                            .append(generated.get(i)).append("\n\n");
+                }
+                stream.write(text.toString().getBytes(StandardCharsets.UTF_8));
+                Toast.makeText(this, "فایل ذخیره شد؛ آن را محرمانه نگه دارید", Toast.LENGTH_LONG).show();
+            } catch (Exception e) {
+                Toast.makeText(this, "خطا در ذخیره فایل: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
+    @Override protected void onDestroy() {
+        stopGeneration("برنامه بسته شد");
+        super.onDestroy();
+    }
 }
