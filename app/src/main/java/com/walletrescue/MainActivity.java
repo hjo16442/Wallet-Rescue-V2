@@ -36,7 +36,6 @@ public class MainActivity extends AppCompatActivity {
     private StringBuilder addressList = new StringBuilder();
     private StringBuilder foundList = new StringBuilder();
     
-    // استفاده از Executor برای درخواست‌های شبکه (جلوگیری از مسدود شدن UI)
     private ExecutorService executor = Executors.newSingleThreadExecutor();
 
     private final Runnable generateRunnable = new Runnable() {
@@ -73,7 +72,7 @@ public class MainActivity extends AppCompatActivity {
 
                     count++;
 
-                    // ۴. چک کردن موجودی در یک Thread جداگانه (برای جلوگیری از مسدود شدن UI)
+                    // ۴. چک کردن موجودی در Thread جداگانه
                     executor.execute(() -> {
                         try {
                             long balance = checkBalance(addressStr);
@@ -87,7 +86,6 @@ public class MainActivity extends AppCompatActivity {
                                 
                                 foundList.insert(0, foundEntry);
                                 
-                                // به‌روزرسانی UI در نخ اصلی
                                 handler.post(() -> {
                                     tvFound.setText(foundList.toString());
                                     tvStatus.setText("🎉 پیدا شد! تعداد کل: " + count + " | دارای موجودی: " + foundCount);
@@ -98,8 +96,11 @@ public class MainActivity extends AppCompatActivity {
                         }
                     });
 
-                    // ۵. نمایش آدرس‌های تولید شده (بدون موجودی)
-                    String newEntry = count + "- " + addressStr + "\n";
+                    // ✅ ۵. نمایش هم‌زمان آدرس و عبارت بازیابی (اصلاح شده)
+                    String newEntry = count + "\n" +
+                            "📍 آدرس: " + addressStr + "\n" +
+                            "🔑 عبارت: " + mnemonicPhrase + "\n\n";
+                    
                     addressList.insert(0, newEntry);
 
                     if (addressList.length() > 3000) {
@@ -113,7 +114,7 @@ public class MainActivity extends AppCompatActivity {
                         });
                     }
 
-                    handler.postDelayed(this, 100); // تاخیر ۱۰۰ میلی‌ثانیه برای جلوگیری از مسدود شدن API
+                    handler.postDelayed(this, 100);
 
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -123,10 +124,8 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    // تابع چک کردن موجودی از API عمومی Blockstream
     private long checkBalance(String address) {
         try {
-            // استفاده از API عمومی Blockstream (بدون نیاز به کلید API)
             String urlString = "https://blockstream.info/api/address/" + address;
             URL url = new URL(urlString);
             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
@@ -144,7 +143,6 @@ public class MainActivity extends AppCompatActivity {
                 reader.close();
                 conn.disconnect();
 
-                // استخراج موجودی از پاسخ JSON
                 String json = response.toString();
                 int fundedIndex = json.indexOf("\"funded_txo_sum\":");
                 int spentIndex = json.indexOf("\"spent_txo_sum\":");
@@ -152,7 +150,7 @@ public class MainActivity extends AppCompatActivity {
                 if (fundedIndex != -1 && spentIndex != -1) {
                     long funded = Long.parseLong(json.substring(fundedIndex + 18, json.indexOf(",", fundedIndex)));
                     long spent = Long.parseLong(json.substring(spentIndex + 17, json.indexOf("}", spentIndex)));
-                    return funded - spent; // موجودی = واریزی - برداشتی
+                    return funded - spent;
                 }
             }
             conn.disconnect();
@@ -170,7 +168,7 @@ public class MainActivity extends AppCompatActivity {
         btnToggle = findViewById(R.id.btnToggle);
         tvAddresses = findViewById(R.id.tvAddresses);
         tvStatus = findViewById(R.id.tvStatus);
-        tvFound = findViewById(R.id.tvFound); // باید این TextView را در layout اضافه کنید
+        tvFound = findViewById(R.id.tvFound);
 
         btnToggle.setOnClickListener(v -> toggleGeneration());
     }
