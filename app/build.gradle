@@ -4,7 +4,7 @@ android {
  compileSdk 35
  packaging { resources { pickFirsts += ['org/bouncycastle/x509/CertPathReviewerMessages_*.properties', 'META-INF/DISCLAIMER'] } }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17; coreLibraryDesugaringEnabled true }
- defaultConfig { applicationId 'com.walletrescue'; minSdk 24; targetSdk 35; versionCode 8; versionName '3.0-BTC' }
+ defaultConfig { applicationId 'com.walletrescue'; minSdk 24; targetSdk 35; versionCode 9; versionName '4.0-OFFLINE-BIP39' }
 }
 configurations.configureEach { exclude group: 'org.bouncycastle', module: 'bcprov-jdk15to18' }
 configurations.configureEach {
