@@ -10,6 +10,7 @@ import android.widget.EditText;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.text.TextUtils;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
@@ -44,7 +45,7 @@ public class MainActivity extends AppCompatActivity {
             try {
                 byte[] entropy = new byte[wordCount == 12 ? 16 : 32];
                 secureRandom.nextBytes(entropy);
-                String phrase = String.join(" ", MnemonicCode.INSTANCE.toMnemonic(entropy));
+                String phrase = TextUtils.join(" ", MnemonicCode.INSTANCE.toMnemonic(entropy));
                 generated.add(phrase);
                 completed++;
                 outputText.setText("عبارت شماره " + completed + " از " + targetCount + "\n\n" + phrase);
