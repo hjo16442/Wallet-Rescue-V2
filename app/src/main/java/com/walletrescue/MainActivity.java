@@ -9,7 +9,7 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import org.bitcoinj.core.ECKey;
 import org.bitcoinj.core.SegwitAddress;
-import org.bitcoinj.core.NetworkParameters;
+import org.bitcoinj.params.MainNetParams;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -27,7 +27,7 @@ public class MainActivity extends AppCompatActivity {
                 try {
                     // تولید کلید و آدرس SegWit
                     ECKey key = new ECKey();
-                    SegwitAddress address = SegwitAddress.fromKey(NetworkParameters.MAINNET, key);
+                    SegwitAddress address = SegwitAddress.fromKey(MainNetParams.get(), key);
                     
                     count++;
                     addressList.insert(0, address.toString() + "\n"); // افزودن به ابتدای لیست
