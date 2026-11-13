@@ -97,7 +97,7 @@ public class MainActivity extends AppCompatActivity {
         completed = 0;
         generated.clear();
         outputText.setText("");
-        counterText.setText("تعداد تولیدشده: 0 / 1");
+        counterText.setText("تعداد تولیدشده: 0 / " + targetCount);
         running = true;
         statusText.setText("در حال تولید عبارت استاندارد BIP39...");
         updateButtons();
