@@ -13,7 +13,6 @@ import org.bitcoinj.crypto.DeterministicKey;
 import org.bitcoinj.crypto.HDKeyDerivation;
 import org.bitcoinj.crypto.MnemonicCode;
 import org.bitcoinj.params.MainNetParams;
-import org.bitcoinj.wallet.DeterministicSeed;
 
 import java.security.SecureRandom;
 import java.util.Arrays;
@@ -41,10 +40,9 @@ public class MainActivity extends AppCompatActivity {
                     List<String> mnemonicList = MnemonicCode.INSTANCE.toMnemonic(entropy);
                     String mnemonicPhrase = String.join(" ", mnemonicList);
 
-                    // ۳. تبدیل عبارت به Seed (۶۴ بایت) و ساخت کلید اصلی (Master Key)
+                    // ۳. تبدیل عبارت به Seed (۶۴ بایت) و ساخت کلید اصلی (Master Key) - ✅ اصلاح شده
                     byte[] seedBytes = MnemonicCode.INSTANCE.toSeed(mnemonicList, "");
-                    DeterministicSeed seed = new DeterministicSeed(seedBytes, mnemonicList, "", 0L);
-                    DeterministicKey masterKey = seed.getKeyChain(MainNetParams.get()).getMasterKey();
+                    DeterministicKey masterKey = HDKeyDerivation.createMasterPrivateKey(seedBytes);
 
                     // ۴. مسیر مشتق‌سازی استاندارد BIP84 (برای آدرس‌های Native SegWit)
                     List<ChildNumber> path = Arrays.asList(
@@ -55,36 +53,46 @@ public class MainActivity extends AppCompatActivity {
                             new ChildNumber(0, false)    // 0  (ایندکس آدرس)
                     );
 
-                    // ۵. استخراج کلید فرزند از روی مسیر
-                    DeterministicKey childKey = HDKeyDerivation.deriveChildKey(masterKey, path);
+                    // ۵. استخراج کلید فرزند از روی مسیر (باید تک‌تک پیمایش شود) - ✅ اصلاح شده
+                    DeterministicKey childKey = masterKey;
+                    for (ChildNumber childNumber : path) {
+                        childKey = HDKeyDerivation.deriveChildKey(childKey, childNumber);
+                    }
 
                     // ۶. تولید آدرس بیت‌کوین از کلید فرزند
                     SegwitAddress address = SegwitAddress.fromKey(MainNetParams.get(), childKey);
 
                     count++;
                     
-                    // نمایش هم‌زمان آدرس و عبارت بازیابی در یک خط
+                    // نمایش هم‌زمان آدرس و عبارت بازیابی
                     String newEntry = count + "- آدرس: " + address.toBech32() + "\nعبارت: " + mnemonicPhrase + "\n\n";
                     addressList.insert(0, newEntry);
 
-                    // محدود کردن طول متن برای جلوگیری از پر شدن حافظه و کرش کردن برنامه
-                    if (addressList.length() > 5000) {
-                        addressList.setLength(5000);
+                    // ✅ بهینه‌سازی: جلوگیری از پر شدن حافظه و کرش کردن برنامه در اجرای طولانی‌مدت
+                    // فقط ۲۰ مورد آخر را نگه می‌دارد
+                    String[] lines = addressList.toString().split("\n\n");
+                    if (lines.length > 20) {
+                        addressList.setLength(0);
+                        for (int i = 0; i < 20; i++) {
+                            addressList.append(lines[i]).append("\n\n");
+                        }
                     }
 
-                    // به‌روزرسانی رابط کاربری هر ۵ بار (چون سرعت تولید پایین آمده، عدد ۱۰۰ خیلی دیر آپدیت می‌کند)
-                    if (count % 5 == 0) {
+                    // به‌روزرسانی رابط کاربری هر ۳ بار
+                    if (count % 3 == 0) {
                         runOnUiThread(() -> {
                             tvAddresses.setText(addressList.toString());
-                            tvStatus.setText("در حال تولید... | تعداد: " + count);
+                            tvStatus.setText("در حال تولید... | تعداد کل: " + count);
                         });
                     }
 
-                    // ادامه حلقه
+                    // ادامه حلقه به صورت خودکار
                     handler.post(this);
 
                 } catch (Exception e) {
                     e.printStackTrace();
+                    // در صورت خطا، برای جلوگیری از توقف کامل، دوباره تلاش می‌کند
+                    handler.post(this);
                 }
             }
         }
