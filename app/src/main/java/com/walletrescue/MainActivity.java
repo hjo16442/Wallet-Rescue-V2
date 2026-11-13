@@ -1,4 +1,4 @@
-package com.walletrescue;
+package com.example.bitcoingen;
 
 import android.os.Bundle;
 import android.os.Handler;
@@ -6,29 +6,50 @@ import android.os.Looper;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
-import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
-import org.bitcoinj.core.MnemonicCode;
-import org.bitcoinj.crypto.MnemonicException;
-import java.security.SecureRandom;
-import java.util.List;
+import org.bitcoinj.core.ECKey;
+import org.bitcoinj.core.SegwitAddress;
+import org.bitcoinj.core.NetworkParameters;
 
 public class MainActivity extends AppCompatActivity {
 
-    private TextView tvResult;
-    private Button btnStart, btnStop;
+    private Button btnToggle;
+    private TextView tvAddresses, tvStatus;
     private Handler handler = new Handler(Looper.getMainLooper());
     private boolean isRunning = false;
-    private int wordCount = 12; // پیش‌فرض ۱۲ کلمه
+    private long count = 0;
+    private StringBuilder addressList = new StringBuilder();
 
-    // Runnable برای اجرای مداوم
     private final Runnable generateRunnable = new Runnable() {
         @Override
         public void run() {
             if (isRunning) {
-                generateAndDisplay();
-                // تکرار هر ۵۰۰ میلی‌ثانیه (نیم ثانیه)
-                handler.postDelayed(this, 500); 
+                try {
+                    // تولید کلید و آدرس SegWit
+                    ECKey key = new ECKey();
+                    SegwitAddress address = SegwitAddress.fromKey(NetworkParameters.MAINNET, key);
+                    
+                    count++;
+                    addressList.insert(0, address.toString() + "\n"); // افزودن به ابتدای لیست
+                    
+                    // محدود کردن تعداد خطوط نمایش داده شده برای جلوگیری از پر شدن حافظه
+                    if (addressList.length() > 5000) {
+                        addressList.setLength(5000);
+                    }
+
+                    // بروزرسانی UI هر 100 آدرس یکبار برای عملکرد بهتر
+                    if (count % 100 == 0) {
+                        runOnUiThread(() -> {
+                            tvAddresses.setText(addressList.toString());
+                            tvStatus.setText("در حال تولید... | تعداد: " + count);
+                        });
+                    }
+                    
+                    // تکرار سریع
+                    handler.post(this);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
         }
     };
@@ -38,58 +59,31 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        tvResult = findViewById(R.id.tvResult);
-        btnStart = findViewById(R.id.btnStart);
-        btnStop = findViewById(R.id.btnStop);
+        btnToggle = findViewById(R.id.btnToggle);
+        tvAddresses = findViewById(R.id.tvAddresses);
+        tvStatus = findViewById(R.id.tvStatus);
 
-        btnStart.setOnClickListener(v -> startAutoGeneration());
-        btnStop.setOnClickListener(v -> stopAutoGeneration());
+        btnToggle.setOnClickListener(v -> toggleGeneration());
     }
 
-    private void startAutoGeneration() {
-        if (!isRunning) {
+    private void toggleGeneration() {
+        if (isRunning) {
+            isRunning = false;
+            btnToggle.setText("شروع تولید");
+            btnToggle.setBackgroundTintList(getColorStateList(android.R.color.holo_blue_light));
+            tvStatus.setText("وضعیت: متوقف");
+        } else {
             isRunning = true;
-            btnStart.setEnabled(false);
-            btnStop.setEnabled(true);
+            btnToggle.setText("توقف");
+            btnToggle.setBackgroundTintList(getColorStateList(android.R.color.holo_red_light));
             handler.post(generateRunnable);
-        }
-    }
-
-    private void stopAutoGeneration() {
-        isRunning = false;
-        btnStart.setEnabled(true);
-        btnStop.setEnabled(false);
-        handler.removeCallbacks(generateRunnable);
-    }
-
-    private void generateAndDisplay() {
-        try {
-            // انتخاب تصادفی بین ۱۲ و ۲۴ کلمه یا ثابت نگه داشتن آن
-            int entropyBits = (wordCount == 12) ? 128 : 256;
-            
-            byte[] entropy = new byte[entropyBits / 8];
-            SecureRandom secureRandom = new SecureRandom();
-            secureRandom.nextBytes(entropy);
-
-            List<String> mnemonic = MnemonicCode.INSTANCE.toMnemonic(entropy);
-            
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < mnemonic.size(); i++) {
-                sb.append(mnemonic.get(i));
-                if (i < mnemonic.size() - 1) sb.append(" ");
-            }
-            
-            // نمایش در UI
-            tvResult.setText(sb.toString());
-            
-        } catch (Exception e) {
-            e.printStackTrace();
         }
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        stopAutoGeneration(); // توقف هنگام بسته شدن برنامه
+        isRunning = false;
+        handler.removeCallbacks(generateRunnable);
     }
 }
