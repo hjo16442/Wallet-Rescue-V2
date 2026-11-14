@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.BitcoinGen" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#F7931A</item>
+        <item name="colorPrimaryVariant">#C77700</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#455A64</item>
+        <item name="colorOnSecondary">#FFFFFF</item>
+    </style>
+</resources>
