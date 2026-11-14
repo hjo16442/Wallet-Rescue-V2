@@ -1,6 +1,7 @@
 package com.bitcoinaddressexplorer;
 
 import android.app.Activity;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.graphics.Typeface;
 import android.view.Gravity;
